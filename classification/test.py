@@ -1,20 +1,19 @@
-import numpy as np
-import sys
-import os
-import pickle
 import argparse
+import os
+import sys
+
+import numpy as np
 import torch
-import torch.nn as nn
 import torch.backends.cudnn as cudnn
-import torchvision.transforms as trn
-import torchvision.datasets as dset
 import torch.nn.functional as F
+import torchvision.datasets as dset
+import torchvision.transforms as trn
+from PIL import Image as PILImage
+
+from models.densenet import DenseNet3
 # from models.wrn import WideResNet
 # from models.densenet import DenseNet3
 from models.wrn_virtual import WideResNet
-from models.densenet import DenseNet3
-from skimage.filters import gaussian as gblur
-from PIL import Image as PILImage
 
 # go through rigamaroo to do ...utils.display_results import show_performance
 if __package__ is None:
@@ -24,7 +23,6 @@ if __package__ is None:
     sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))
     from utils.display_results import show_performance, get_measures, print_measures, print_measures_with_std
     import utils.svhn_loader as svhn
-    import utils.lsun_loader as lsun_loader
     import utils.score_calculation as lib
 
 parser = argparse.ArgumentParser(description='Evaluates a CIFAR OOD Detector',
@@ -75,10 +73,10 @@ test_loader = torch.utils.data.DataLoader(test_data, batch_size=args.test_bs, sh
 
 # Create model
 if args.model_name == 'res':
-    net = WideResNet(args.layers, num_classes, args.widen_factor, dropRate=args.droprate,
+    net = WideResNet(args.layers, num_classes, args.widen_factor, drop_rate=args.droprate,
                      null_space_red_dim=args.null_space_red_dim)
 else:
-    net = DenseNet3(100, num_classes, 12, reduction=0.5, bottleneck=True, dropRate=0.0, normalizer=None,
+    net = DenseNet3(100, num_classes, 12, reduction=0.5, bottleneck=True, drop_rate=0.0, normalizer=None,
                          k=None, info=None)
 start_epoch = 0
 
@@ -104,7 +102,7 @@ if args.load != '':
             start_epoch = i + 1
             break
     if start_epoch == 0:
-        assert False, "could not resume "+model_name
+        assert False, "could not resume " + args.model_name
 
 net.eval()
 

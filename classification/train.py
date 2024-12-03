@@ -1,16 +1,15 @@
 # -*- coding: utf-8 -*-
-import numpy as np
-import os
-import pickle
 import argparse
+import os
 import time
+
+import numpy as np
 import torch
-import torch.nn as nn
 import torch.backends.cudnn as cudnn
-import torchvision.transforms as trn
-import torchvision.datasets as dset
 import torch.nn.functional as F
-from tqdm import tqdm
+import torchvision.datasets as dset
+import torchvision.transforms as trn
+
 from models.wrn import WideResNet
 
 if __package__ is None:
@@ -55,13 +54,14 @@ parser.add_argument('--score', type=str, default='OE', help='OE|energy')
 parser.add_argument('--seed', type=int, default=1, help='seed for np(tinyimages80M sampling); 1|2|8|100|107')
 args = parser.parse_args()
 
-
 if args.score == 'OE':
     save_info = 'oe_tune'
 elif args.score == 'energy':
     save_info = 'energy_ft'
+else:
+    raise ValueError('Unknown score type')
 
-args.save = args.save+save_info
+args.save = args.save + save_info
 if os.path.isdir(args.save) == False:
     os.mkdir(args.save)
 state = {k: v for k, v in args._get_kwargs()}
@@ -114,7 +114,7 @@ test_loader = torch.utils.data.DataLoader(
     num_workers=args.prefetch, pin_memory=True)
 
 # Create model
-net = WideResNet(args.layers, num_classes, args.widen_factor, dropRate=args.droprate)
+net = WideResNet(args.layers, num_classes, args.widen_factor, drop_rate=args.droprate)
 
 def recursion_change_bn(module):
     if isinstance(module, torch.nn.BatchNorm2d):

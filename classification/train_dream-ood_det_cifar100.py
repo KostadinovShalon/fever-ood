@@ -1,15 +1,16 @@
 # -*- coding: utf-8 -*-
-import numpy as np
-import os
-
 import argparse
+import os
 import time
-import torch
 
+import numpy as np
+import torch
 import torch.backends.cudnn as cudnn
-import torchvision.transforms as trn
-import torchvision.datasets as dset
 import torch.nn.functional as F
+import torchvision.datasets as dset
+import torchvision.transforms as trn
+
+from classification.models.resnet import ResNetModel
 
 
 class PartialDataset(torch.utils.data.Dataset):
@@ -99,10 +100,6 @@ parser.add_argument('--ood-root', type=str, default='./data/dream-ood-cifar-outl
 
 args = parser.parse_args()
 
-
-from models.resnet import ResNet_Model
-
-
 if args.score == 'OE':
     save_info = 'energy_ft_sd'
 elif args.score == 'energy':
@@ -163,9 +160,9 @@ test_loader = torch.utils.data.DataLoader(
 
 # Create model
 if args.r50:
-    net = ResNet_Model(name='resnet50', num_classes=num_classes, null_space_red_dim=args.null_space_red_dim)
+    net = ResNetModel(name='resnet50', num_classes=num_classes, null_space_red_dim=args.null_space_red_dim)
 else:
-    net = ResNet_Model(name='resnet34', num_classes=num_classes, null_space_red_dim=args.null_space_red_dim)
+    net = ResNetModel(name='resnet34', num_classes=num_classes, null_space_red_dim=args.null_space_red_dim)
 for p in net.parameters():
     p.register_hook(lambda grad: torch.clamp(grad, -35, 35))
 

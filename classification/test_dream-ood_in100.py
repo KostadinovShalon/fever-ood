@@ -1,18 +1,15 @@
-import numpy as np
-import sys
-import os
-import pickle
 import argparse
-import torch
-import torch.nn as nn
-import torchvision
-import torch.backends.cudnn as cudnn
-import torchvision.transforms as trn
-import torchvision.datasets as dset
-import torch.nn.functional as F
-from models.resnet import ResNet_Model
-from PIL import Image as PILImage
+import os
 
+import numpy as np
+import torch
+import torch.backends.cudnn as cudnn
+import torch.nn.functional as F
+import torchvision
+import torchvision.datasets as dset
+import torchvision.transforms as trn
+
+from models.resnet import ResNetModel
 
 # sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))
 if __package__ is None:
@@ -21,8 +18,6 @@ if __package__ is None:
 
     sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))
     from utils.display_results import show_performance, get_measures, print_measures, print_measures_with_std
-    import utils.svhn_loader as svhn
-    import utils.lsun_loader as lsun_loader
     import utils.score_calculation as lib
 
 parser = argparse.ArgumentParser(description='Evaluates a CIFAR OOD Detector',
@@ -78,7 +73,7 @@ test_loader = torch.utils.data.DataLoader(test_data, batch_size=args.test_bs, sh
                                           num_workers=args.prefetch, pin_memory=True)
 
 
-net = ResNet_Model(name='resnet34', num_classes=num_classes, null_space_red_dim=args.null_space_red_dim)
+net = ResNetModel(name='resnet34', num_classes=num_classes, null_space_red_dim=args.null_space_red_dim)
 
 start_epoch = 0
 
@@ -246,15 +241,15 @@ def get_and_print_results(ood_loader, num_to_avg=args.num_to_avg, ood_name=None)
         else:
             measures = get_measures(-in_score, -out_score)
         # breakpoint()
-        aurocs.append(measures[0]);
-        auprs.append(measures[1]);
+        aurocs.append(measures[0])
+        auprs.append(measures[1])
         fprs.append(measures[2])
     print(in_score[:3], out_score[:3])
-    auroc = np.mean(aurocs);
-    aupr = np.mean(auprs);
+    auroc = np.mean(aurocs)
+    aupr = np.mean(auprs)
     fpr = np.mean(fprs)
-    auroc_list.append(auroc);
-    aupr_list.append(aupr);
+    auroc_list.append(auroc)
+    aupr_list.append(aupr)
     fpr_list.append(fpr)
 
     if num_to_avg >= 5:

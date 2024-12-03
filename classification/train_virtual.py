@@ -140,11 +140,12 @@ if args.model == 'allconv':
 elif args.model == 'rn50':
     net = VirtualResNet50(num_classes, null_space_red_dim=args.null_space_red_dim)
 else:
-    net = WideResNet(args.layers, num_classes, args.widen_factor, dropRate=args.droprate,
+    net = WideResNet(args.layers, num_classes, args.widen_factor, drop_rate=args.droprate,
                      null_space_red_dim=args.null_space_red_dim)
 
 if args.null_space_red_dim > 0:
     args.model = f'{args.model}_nsr{args.null_space_red_dim}'
+
 
 def subnet_fc(c_in, c_out):
     return nn.Sequential(nn.Linear(c_in, 2048), nn.ReLU(), nn.Linear(2048, c_out))
@@ -157,11 +158,10 @@ else:
 
 n_fts = net.nChannels if args.null_space_red_dim <= 0 else args.null_space_red_dim
 
+
 def NLLLoss(z, sldj):
     """Negative log-likelihood loss assuming isotropic gaussian with unit norm.
-      Args:
-         k (int or float): Number of discrete values in each input dimension.
-            E.g., `k` is 256 for natural images.
+
       See Also:
           Equation (3) in the RealNVP paper: https://arxiv.org/abs/1605.08803
     """
@@ -174,9 +174,6 @@ def NLLLoss(z, sldj):
 
 def NLL(z, sldj):
     """Negative log-likelihood loss assuming isotropic gaussian with unit norm.
-      Args:
-         k (int or float): Number of discrete values in each input dimension.
-            E.g., `k` is 256 for natural images.
       See Also:
           Equation (3) in the RealNVP paper: https://arxiv.org/abs/1605.08803
     """

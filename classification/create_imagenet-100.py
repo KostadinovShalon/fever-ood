@@ -1,5 +1,9 @@
 import os
+import argparse
 
+parser = argparse.ArgumentParser(description='Create ImageNet-100 dataset')
+parser.add_argument('--imagenet-dir', type=str, help='Path to ImageNet dataset')
+args = parser.parse_args()
 im100_classes = [
     'n01498041', 'n01514859', 'n01582220', 'n01608432', 'n01616318', 'n01687978', 'n01776313', 'n01806567', 'n01833805',
     'n01882714', 'n01910747', 'n01944390', 'n01985128', 'n02007558', 'n02071294', 'n02085620', 'n02114855', 'n02123045',
@@ -13,7 +17,10 @@ im100_classes = [
     'n03916031', 'n03938244', 'n04004767', 'n04026417', 'n04090263', 'n04133789', 'n04153751', 'n04296562', 'n04330267',
     'n04371774', 'n04404412', 'n04465501', 'n04485082', 'n04507155', 'n04536866', 'n04579432', 'n04606251', 'n07714990',
     'n07745940']
+
 os.makedirs('train', exist_ok=True)
 for i in im100_classes:
-    os.system(f'ln -s /home2/pfvn47/imagenet/train/{i} train/{i}')
+    if args.imagenet_dir[-1] == '/':
+        args.imagenet_dir = args.imagenet_dir[:-1]
+    os.system(f'ln -s {args.imagenet_dir}/{i} train/{i}')
     print(f'Linked {i}')

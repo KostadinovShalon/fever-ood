@@ -1,16 +1,18 @@
 # -*- coding: utf-8 -*-
-import numpy as np
-import os
-
 import argparse
+import os
 import time
-import torch
 
-import torchvision
+import numpy as np
+import torch
 import torch.backends.cudnn as cudnn
-import torchvision.transforms as trn
-import torchvision.datasets as dset
 import torch.nn.functional as F
+import torchvision
+import torchvision.datasets as dset
+import torchvision.transforms as trn
+from apex import amp
+
+from classification.models.resnet import ResNetModel
 
 
 class PartialDataset(torch.utils.data.Dataset):
@@ -104,12 +106,12 @@ parser.add_argument('--id-root', type=str, default='./data/imagenet-100')
 parser.add_argument('--ood-root', type=str, default='./data/ood_in100')
 args = parser.parse_args()
 
-from models.resnet import ResNet_Model
-
 if args.score == 'OE':
     save_info = 'oe_tune'
 elif args.score == 'energy':
     save_info = 'energy_ft_sd'
+else:
+    raise ValueError('Unknown score type')
 
 args.save = args.save + save_info
 if os.path.isdir(args.save) == False:
@@ -206,9 +208,9 @@ test_loader = torch.utils.data.DataLoader(
 
 # Create model
 if args.r50:
-    net = ResNet_Model(name='resnet50', num_classes=num_classes, null_space_red_dim=args.null_space_red_dim)
+    net = ResNetModel(name='resnet50', num_classes=num_classes, null_space_red_dim=args.null_space_red_dim)
 else:
-    net = ResNet_Model(name='resnet34', num_classes=num_classes, null_space_red_dim=args.null_space_red_dim)
+    net = ResNetModel(name='resnet34', num_classes=num_classes, null_space_red_dim=args.null_space_red_dim)
 for p in net.parameters():
     p.register_hook(lambda grad: torch.clamp(grad, -35, 35))
 
