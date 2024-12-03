@@ -9,6 +9,7 @@ from torch.autograd import Variable
 
 def to_np(x): return x.data.cpu().numpy()
 
+
 def concat(x): return np.concatenate(x, axis=0)
 
 

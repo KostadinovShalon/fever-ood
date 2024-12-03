@@ -3,6 +3,7 @@ from PIL import Image
 import os
 import os.path
 import numpy as np
+from torchvision.datasets.utils import check_integrity, download_url
 
 
 class SVHN(data.Dataset):

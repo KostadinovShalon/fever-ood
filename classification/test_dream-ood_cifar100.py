@@ -10,15 +10,9 @@ import torchvision.transforms as trn
 
 from models.resnet import ResNetModel
 
-# sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))
-if __package__ is None:
-    import sys
-    from os import path
-
-    sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))
-    from utils.display_results import show_performance, get_measures, print_measures, print_measures_with_std
-    import utils.svhn_loader as svhn
-    import utils.score_calculation as lib
+import utils.score_calculation as lib
+import utils.svhn_loader as svhn
+from utils.display_results import show_performance, get_measures, print_measures, print_measures_with_std
 
 parser = argparse.ArgumentParser(description='Evaluates a CIFAR OOD Detector',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)

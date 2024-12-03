@@ -12,7 +12,7 @@ import torch.nn.functional as F
 import torchvision.datasets as dset
 import torchvision.transforms as trn
 from models.densenet import DenseNet3
-from models.wrn_virtual import WideResNet
+from models.wrn import WideResNet
 from utils import svhn_loader as svhn
 
 # if __package__ is None:

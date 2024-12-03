@@ -13,7 +13,7 @@ from PIL import Image as PILImage
 from models.densenet import DenseNet3
 # from models.wrn import WideResNet
 # from models.densenet import DenseNet3
-from models.wrn_virtual import WideResNet
+from models.wrn import WideResNet
 
 # go through rigamaroo to do ...utils.display_results import show_performance
 if __package__ is None:

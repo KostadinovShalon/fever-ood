@@ -19,7 +19,7 @@ class PartialDataset(torch.utils.data.Dataset):
 
 def validation_split(dataset, val_share=0.1):
     """
-       Split a (training and vaidation combined) dataset into training and validation.
+       Split a (training and validation combined) dataset into training and validation.
        Note that to be statistically sound, the items in the dataset should be statistically
        independent (e.g. not sorted by class, not several instances of the same dataset that
        could end up in either set).
@@ -50,7 +50,7 @@ class PartialFolder(torch.utils.data.Dataset):
 
 def validation_split_folder(dataset, val_share=0.1):
     """
-       Split a (training and vaidation combined) dataset into training and validation.
+       Split a (training and validation combined) dataset into training and validation.
        Note that to be statistically sound, the items in the dataset should be statistically
        independent (e.g. not sorted by class, not several instances of the same dataset that
        could end up in either set).

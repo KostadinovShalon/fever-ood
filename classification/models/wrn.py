@@ -41,7 +41,8 @@ class NetworkBlock(nn.Module):
         super(NetworkBlock, self).__init__()
         self.layer = self._make_layer(block, in_planes, out_planes, nb_layers, stride, drop_rate)
 
-    def _make_layer(self, block, in_planes, out_planes, nb_layers, stride, drop_rate):
+    @staticmethod
+    def _make_layer(block, in_planes, out_planes, nb_layers, stride, drop_rate):
         layers = []
         for i in range(nb_layers):
             layers.append(block(i == 0 and in_planes or out_planes, out_planes, i == 0 and stride or 1, drop_rate))
@@ -52,7 +53,7 @@ class NetworkBlock(nn.Module):
 
 
 class WideResNet(nn.Module):
-    def __init__(self, depth, num_classes, widen_factor=1, drop_rate=0.0, godin=False):
+    def __init__(self, depth, num_classes, widen_factor=1, drop_rate=0.0, godin=False, null_space_red_dim=-1):
         super(WideResNet, self).__init__()
         nChannels = [16, 16 * widen_factor, 32 * widen_factor, 64 * widen_factor]
         assert ((depth - 4) % 6 == 0)
@@ -71,9 +72,18 @@ class WideResNet(nn.Module):
         self.bn1 = nn.BatchNorm2d(nChannels[3])
         self.relu = nn.ReLU(inplace=True)
         self.godin = godin
+        self.null_space_red_dim = null_space_red_dim
         self.nChannels = nChannels[3]
         if not godin:
-            self.fc = nn.Linear(nChannels[3], num_classes)
+            if null_space_red_dim <= 0:
+                self.fc = nn.Linear(nChannels[3], num_classes)
+            else:
+                self.fc = nn.Sequential(
+                    nn.Linear(nChannels[3], null_space_red_dim),
+                    nn.ReLU(inplace=True),
+                    nn.Linear(null_space_red_dim, num_classes))
+                self.fc[0].bias.data.zero_()
+                self.fc[2].bias.data.zero_()
         else:
             self.g = nn.Sequential(
                 nn.Linear(nChannels[3], 1),
@@ -82,9 +92,17 @@ class WideResNet(nn.Module):
             )
             # torch.nn.init.xavier_normal_(self.g[0].weight)
             # self.g[0].bias.data = torch.zeros(size=self.g[0].bias.size()).cuda()
-            self.fc = nn.Linear(nChannels[3], num_classes)
-            nn.init.kaiming_normal_(self.fc.weight.data, nonlinearity="relu")
-            self.fc.bias.data = torch.zeros(size=self.fc.bias.size()).cuda()
+            if null_space_red_dim <= 0:
+                self.fc = nn.Linear(nChannels[3], num_classes)
+            else:
+                self.fc = nn.Sequential(
+                    nn.Linear(nChannels[3], null_space_red_dim),
+                    nn.ReLU(inplace=True),
+                    nn.Linear(null_space_red_dim, num_classes))
+                self.fc[0].bias.data.zero_()
+                self.fc[2].bias.data.zero_()
+            nn.init.kaiming_normal_(self.fc[2].weight.data, nonlinearity="relu")
+            self.fc[2].bias.data = torch.zeros(size=self.fc[2].bias.size()).cuda()
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -96,7 +114,7 @@ class WideResNet(nn.Module):
             elif isinstance(m, nn.Linear):
                 m.bias.data.zero_()
 
-    def forward(self, x):
+    def penultimate_forward(self, x):
         out = self.conv1(x)
         out = self.block1(out)
         out = self.block2(out)
@@ -104,23 +122,28 @@ class WideResNet(nn.Module):
         out = self.relu(self.bn1(out))
         out = F.avg_pool2d(out, 8)
         out = out.view(-1, self.nChannels)
+        return out
+
+    def forward(self, x):
+        out = self.penultimate_forward(x)
         return self.fc(out)
 
     def forward_virtual(self, x):
-        out = self.conv1(x)
-        out = self.block1(out)
-        out = self.block2(out)
-        out = self.block3(out)
-        out = self.relu(self.bn1(out))
-        out = F.avg_pool2d(out, 8)
-        out = out.view(-1, self.nChannels)
+        out = self.penultimate_forward(x)
+
+        if self.null_space_red_dim > 0:
+            out = self.fc[0](out)
+            out = self.fc[1](out)
+            prob = self.fc[2](out)
+        else:
+            prob = self.fc(out)
         if self.godin:
             deno = self.g(out)
-            return self.fc(out) / deno, out
+            return prob / deno, out
         else:
-            return self.fc(out), out
+            return prob, out
 
-    def intermediate_forward(self, x, layer_index):
+    def intermediate_forward(self, x):
         out = self.conv1(x)
         out = self.block1(out)
         out = self.block2(out)

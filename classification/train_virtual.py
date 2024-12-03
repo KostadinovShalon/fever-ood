@@ -14,23 +14,15 @@ import torchvision.transforms as trn
 from FrEIA.framework import InputNode, Node, OutputNode, GraphINN
 from FrEIA.modules import GLOWCouplingBlock, PermuteRandom
 
-from models.allconv import AllConvNet
 from models.wrn_virtual import WideResNet, VirtualResNet50
-
-# go through rigamaroo to do ...utils.display_results import show_performance
-if __package__ is None:
-    import sys
-    from os import path
-
-    sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))
-    from utils.validation_dataset import validation_split
+from utils.validation_dataset import validation_split
 
 parser = argparse.ArgumentParser(description='Trains a CIFAR Classifier',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('--dataset', type=str, choices=['cifar10', 'cifar100', 'imagenet-1k', 'imagenet-100'],
                     help='Choose between CIFAR-10, CIFAR-100, Imagenet-100, Imagenet-1k.')
 parser.add_argument('--model', '-m', type=str, default='wrn',
-                    choices=['allconv', 'wrn', 'rn50'], help='Choose architecture.')
+                    choices=['wrn', 'rn50'], help='Choose architecture.')
 parser.add_argument('--calibration', '-c', action='store_true',
                     help='Train a model to be used for calibration. This holds out some data for validation.')
 # Optimization options
@@ -135,9 +127,7 @@ test_loader = torch.utils.data.DataLoader(
     worker_init_fn=seed_worker,)
 
 # Create model
-if args.model == 'allconv':
-    net = AllConvNet(num_classes)
-elif args.model == 'rn50':
+if args.model == 'rn50':
     net = VirtualResNet50(num_classes, null_space_red_dim=args.null_space_red_dim)
 else:
     net = WideResNet(args.layers, num_classes, args.widen_factor, drop_rate=args.droprate,

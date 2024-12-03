@@ -12,8 +12,8 @@ class RouteFcMaxAct(nn.Linear):
             self.weight = nn.Parameter(torch.Tensor(out_features, in_features, 1, 1))
         self.topk = topk
 
-    def forward(self, input):
-        vote = input[:, None, :] * self.weight.squeeze()
+    def forward(self, x):
+        vote = x[:, None, :] * self.weight.squeeze()
         if self.bias is not None:
             out = vote.topk(self.topk, 2)[0].sum(2) + self.bias
         else:
@@ -21,11 +21,11 @@ class RouteFcMaxAct(nn.Linear):
         return out
 
 
-
 class RouteFcUCPruned(nn.Linear):
 
     def __init__(self, in_features, out_features, bias=True, topk=90, conv1x1=False, info=None):
         super(RouteFcUCPruned, self).__init__(in_features, out_features, bias)
+        self.thresh = None
         if conv1x1:
             self.weight = nn.Parameter(torch.Tensor(out_features, in_features, 1, 1))
         self.topk = topk
@@ -37,10 +37,10 @@ class RouteFcUCPruned(nn.Linear):
         mask = torch.Tensor((self.info > self.thresh))
         self.masked_w = (self.weight.squeeze().cpu() * mask).cuda()
 
-    def forward(self, input):
+    def forward(self, x):
         if self.masked_w is None:
             self.calculate_mask_weight()
-        vote = input[:, None, :] * self.masked_w.cuda()
+        vote = x[:, None, :] * self.masked_w.cuda()
         if self.bias is not None:
             out = vote.sum(2) + self.bias
         else:
@@ -50,7 +50,7 @@ class RouteFcUCPruned(nn.Linear):
 
 class RouteFcWtPruned(nn.Linear):
 
-    def __init__(self, in_features, out_features, bias=True, topk=90, conv1x1=False, info=None):
+    def __init__(self, in_features, out_features, bias=True, topk=90, conv1x1=False):
         super(RouteFcWtPruned, self).__init__(in_features, out_features, bias)
         if conv1x1:
             self.weight = nn.Parameter(torch.Tensor(out_features, in_features, 1, 1))
@@ -63,10 +63,10 @@ class RouteFcWtPruned(nn.Linear):
         mask = w > thresh
         self.masked_w = (self.weight.squeeze() * mask).cuda()
 
-    def forward(self, input):
+    def forward(self, x):
         if self.masked_w is None:
             self.calculate_mask_weight()
-        vote = input[:, None, :] * self.masked_w
+        vote = x[:, None, :] * self.masked_w
         if self.bias is not None:
             out = vote.sum(2) + self.bias
         else:
@@ -76,7 +76,7 @@ class RouteFcWtPruned(nn.Linear):
 
 class RouteFcWtAbsPruned(nn.Linear):
 
-    def __init__(self, in_features, out_features, bias=True, topk=90, conv1x1=False, info=None):
+    def __init__(self, in_features, out_features, bias=True, topk=90, conv1x1=False):
         super(RouteFcWtAbsPruned, self).__init__(in_features, out_features, bias)
         if conv1x1:
             self.weight = nn.Parameter(torch.Tensor(out_features, in_features, 1, 1))
@@ -89,10 +89,10 @@ class RouteFcWtAbsPruned(nn.Linear):
         mask = w.abs() > thresh
         self.masked_w = (self.weight.squeeze() * mask).cuda()
 
-    def forward(self, input):
+    def forward(self, x):
         if self.masked_w is None:
             self.calculate_mask_weight()
-        vote = input[:, None, :] * self.masked_w
+        vote = x[:, None, :] * self.masked_w
         if self.bias is not None:
             out = vote.sum(2) + self.bias
         else:
@@ -104,6 +104,7 @@ class RouteUnitPruned(nn.Linear):
 
     def __init__(self, in_features, out_features, bias=True, topk=5, info=None, conv1x1=False):
         super(RouteUnitPruned, self).__init__(in_features, out_features, bias)
+        self.mask = None
         if conv1x1:
             self.weight = nn.Parameter(torch.Tensor(out_features, in_features, 1, 1))
         self.topk = topk
@@ -115,8 +116,8 @@ class RouteUnitPruned(nn.Linear):
         thresh = np.percentile(unit_avg, self.topk)
         self.mask = torch.Tensor(unit_avg > thresh).float().cuda()
 
-    def forward(self, input):
-        masked_input = input * self.mask
+    def forward(self, x):
+        masked_input = x * self.mask
         vote = masked_input[:, None, :] * self.weight.squeeze()
         if self.bias is not None:
             out = vote.sum(2) + self.bias
@@ -142,10 +143,10 @@ class RouteUnitL1Pruned(nn.Linear):
         thresh = np.percentile(l2, self.topk)
         self.mask = torch.Tensor(l2 > thresh).float().cuda()
 
-    def forward(self, input):
+    def forward(self, x):
         if self.mask is None:
             self.calculate_mask_unit()
-        masked_input = input * self.mask
+        masked_input = x * self.mask
         vote = masked_input[:, None, :] * self.weight.squeeze()
         if self.bias is not None:
             out = vote.sum(2) + self.bias
@@ -166,7 +167,7 @@ class RouteTopkMax(nn.Linear):
         vote = x[:, None, :] * self.weight.squeeze()
         fullsum = vote.sum(2)
         topksum = vote.topk(self.topk, 2)[0].sum(2)
-        max_mask = fullsum == fullsum.max(1, keepdims=True)[0]
+        max_mask = fullsum == fullsum.max(1, keepdim=True)[0]
         if self.bias is not None:
             out = topksum * max_mask.float() + fullsum * (1 - max_mask.float()) + self.bias
         else:
@@ -182,9 +183,9 @@ class RouteDropout(nn.Linear):
             self.weight = nn.Parameter(torch.Tensor(out_features, in_features, 1, 1))
         self.p = p
 
-    def forward(self, input):
-        input = F.dropout(input, self.p / 100, training=True)
-        return super(RouteDropout, self).forward(input)
+    def forward(self, x):
+        x = F.dropout(x, self.p / 100, training=True)
+        return super(RouteDropout, self).forward(x)
         # vote = input[:, None, :] * self.weight.squeeze()
         # mask = torch.cuda.FloatTensor(vote.shape).uniform_() > self.p / 100
         # if self.bias is not None:
@@ -194,12 +195,11 @@ class RouteDropout(nn.Linear):
         # return out
 
 
-
-
 class RouteFcWard(nn.Linear):
 
     def __init__(self, in_features, out_features, bias=True, topk=90, conv1x1=False, info=None):
         super(RouteFcWard, self).__init__(in_features, out_features, bias)
+        self.thresh = None
         if conv1x1:
             self.weight = nn.Parameter(torch.Tensor(out_features, in_features, 1, 1))
         self.topk = topk
@@ -214,10 +214,10 @@ class RouteFcWard(nn.Linear):
         mask = torch.Tensor((ward > self.thresh))
         self.masked_w = (self.weight.squeeze().cpu() * mask).cuda()
 
-    def forward(self, input):
+    def forward(self, x):
         if self.masked_w is None:
             self.calculate_mask_weight()
-        vote = input[:, None, :] * self.masked_w.cuda()
+        vote = x[:, None, :] * self.masked_w.cuda()
         if self.bias is not None:
             out = vote.sum(2) + self.bias
         else:
