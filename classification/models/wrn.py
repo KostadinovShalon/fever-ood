@@ -52,7 +52,7 @@ class NetworkBlock(nn.Module):
 
 
 class WideResNet(nn.Module):
-    def __init__(self, depth, num_classes, widen_factor=1, drop_rate=0.0):
+    def __init__(self, depth, num_classes, widen_factor=1, drop_rate=0.0, godin=False):
         super(WideResNet, self).__init__()
         nChannels = [16, 16 * widen_factor, 32 * widen_factor, 64 * widen_factor]
         assert ((depth - 4) % 6 == 0)
@@ -70,8 +70,21 @@ class WideResNet(nn.Module):
         # global average pooling and classifier
         self.bn1 = nn.BatchNorm2d(nChannels[3])
         self.relu = nn.ReLU(inplace=True)
-        self.fc = nn.Linear(nChannels[3], num_classes)
+        self.godin = godin
         self.nChannels = nChannels[3]
+        if not godin:
+            self.fc = nn.Linear(nChannels[3], num_classes)
+        else:
+            self.g = nn.Sequential(
+                nn.Linear(nChannels[3], 1),
+                nn.BatchNorm1d(1),
+                nn.Sigmoid()
+            )
+            # torch.nn.init.xavier_normal_(self.g[0].weight)
+            # self.g[0].bias.data = torch.zeros(size=self.g[0].bias.size()).cuda()
+            self.fc = nn.Linear(nChannels[3], num_classes)
+            nn.init.kaiming_normal_(self.fc.weight.data, nonlinearity="relu")
+            self.fc.bias.data = torch.zeros(size=self.fc.bias.size()).cuda()
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -93,6 +106,20 @@ class WideResNet(nn.Module):
         out = out.view(-1, self.nChannels)
         return self.fc(out)
 
+    def forward_virtual(self, x):
+        out = self.conv1(x)
+        out = self.block1(out)
+        out = self.block2(out)
+        out = self.block3(out)
+        out = self.relu(self.bn1(out))
+        out = F.avg_pool2d(out, 8)
+        out = out.view(-1, self.nChannels)
+        if self.godin:
+            deno = self.g(out)
+            return self.fc(out) / deno, out
+        else:
+            return self.fc(out), out
+
     def intermediate_forward(self, x, layer_index):
         out = self.conv1(x)
         out = self.block1(out)
@@ -111,5 +138,7 @@ class WideResNet(nn.Module):
         out_list.append(out)
         out = F.avg_pool2d(out, 8)
         out = out.view(-1, self.nChannels)
+        if self.godin:
+            deno = self.g(out)
+            return self.fc(out) / deno, out_list
         return self.fc(out), out_list
-         
