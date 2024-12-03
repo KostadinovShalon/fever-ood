@@ -3,13 +3,8 @@ from PIL import Image
 import os
 import os.path
 import six
-import string
 import sys
-
-if sys.version_info[0] == 2:
-    import cPickle as pickle
-else:
-    import pickle
+import pickle
 
 
 class LSUNClass(data.Dataset):

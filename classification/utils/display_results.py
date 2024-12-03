@@ -93,16 +93,12 @@ def show_performance(pos, neg, method_name='Ours', recall_level=recall_level_def
     print('FPR{:d}:\t\t\t{:.2f}'.format(int(100 * recall_level), 100 * fpr))
     print('AUROC:\t\t\t{:.2f}'.format(100 * auroc))
     print('AUPR:\t\t\t{:.2f}'.format(100 * aupr))
-    # print('FDR{:d}:\t\t\t{:.2f}'.format(int(100 * recall_level), 100 * fdr))
 
 
 def print_measures(auroc, aupr, fpr, method_name='Ours', recall_level=recall_level_default):
     print('\t\t\t\t' + method_name)
     print('  FPR{:d} AUROC AUPR'.format(int(100*recall_level)))
     print('& {:.2f} & {:.2f} & {:.2f}'.format(100*fpr, 100*auroc, 100*aupr))
-    #print('FPR{:d}:\t\t\t{:.2f}'.format(int(100 * recall_level), 100 * fpr))
-    #print('AUROC: \t\t\t{:.2f}'.format(100 * auroc))
-    #print('AUPR:  \t\t\t{:.2f}'.format(100 * aupr))
 
 
 def print_measures_with_std(aurocs, auprs, fprs, method_name='Ours', recall_level=recall_level_default):
@@ -110,9 +106,6 @@ def print_measures_with_std(aurocs, auprs, fprs, method_name='Ours', recall_leve
     print('  FPR{:d} AUROC AUPR'.format(int(100*recall_level)))
     print('& {:.2f} & {:.2f} & {:.2f}'.format(100*np.mean(fprs), 100*np.mean(aurocs), 100*np.mean(auprs)))
     print('& {:.2f} & {:.2f} & {:.2f}'.format(100*np.std(fprs), 100*np.std(aurocs), 100*np.std(auprs)))
-    #print('FPR{:d}:\t\t\t{:.2f}\t+/- {:.2f}'.format(int(100 * recall_level), 100 * np.mean(fprs), 100 * np.std(fprs)))
-    #print('AUROC: \t\t\t{:.2f}\t+/- {:.2f}'.format(100 * np.mean(aurocs), 100 * np.std(aurocs)))
-    #print('AUPR:  \t\t\t{:.2f}\t+/- {:.2f}'.format(100 * np.mean(auprs), 100 * np.std(auprs)))
 
 
 def show_performance_comparison(pos_base, neg_base, pos_ours, neg_ours, baseline_name='Baseline',
@@ -132,5 +125,3 @@ def show_performance_comparison(pos_base, neg_base, pos_ours, neg_ours, baseline
         100 * auroc_base, 100 * auroc_ours))
     print('AUPR:\t\t\t{:.2f}\t\t{:.2f}'.format(
         100 * aupr_base, 100 * aupr_ours))
-    # print('FDR{:d}:\t\t\t{:.2f}\t\t{:.2f}'.format(
-    #     int(100 * recall_level), 100 * fdr_base, 100 * fdr_ours))

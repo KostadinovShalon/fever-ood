@@ -1,6 +1,5 @@
 import numpy as np
 import torch
-from bisect import bisect_left
 
 
 class TinyImages(torch.utils.data.Dataset):
