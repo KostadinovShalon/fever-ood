@@ -20,8 +20,8 @@
 
 title: "FEVER-OOD: Free Energy Vulnerability Elimination for Robust Out-of-Distribution Detection"
 email: your-email@example.com
-#description: >- # this means to ignore newlines until "baseurl:"
-#  Accepted at ECCV 2024
+description: >- # this means to ignore newlines until "baseurl:"
+
 # baseurl: "" # the subpath of your site, e.g. /blog
 url: "" # the base hostname & protocol for your site, e.g. http://example.com
 collapsed-authors-list: B.K.S. Isaac-Medina, M. Che, Y.F.A. Gaus, S. Akcay, T.P. Breckon
