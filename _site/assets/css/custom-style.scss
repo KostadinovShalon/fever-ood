@@ -1,0 +1,320 @@
+$large-breakpoint: 64em !default;
+$medium-breakpoint: 48em !default;
+
+@mixin large {
+  @media screen and (min-width: #{$large-breakpoint}) {
+    @content;
+  }
+}
+
+@mixin medium {
+  @media screen and (min-width: #{$medium-breakpoint}) and (max-width: #{$large-breakpoint}) {
+    @content;
+  }
+}
+
+@mixin small {
+  @media screen and (max-width: #{$medium-breakpoint}) {
+    @content;
+  }
+}
+
+.row {
+  display: flex;
+  justify-content: center;
+}
+div.row ul {
+  display: flex;
+  list-style: none;
+  margin: 0;
+  padding-inline-start: 0;
+}
+
+div.row  li {
+  margin: 0 10px;
+}
+.project-tagline {
+  margin-bottom: 0;
+}
+
+.project-name{
+  transition: 0.3s ;
+}
+
+//img.enlargeable {
+//    transition:transform 0.25s ease;
+//}
+//
+//img.enlargeable:hover {
+//    -webkit-transform:scale(1.5); /* or some other value */
+//    transform:scale(1.5);
+//}
+
+.card {
+  /* Add shadows to create the "card" effect */
+  box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2);
+  transition: 0.3s;
+  width: auto;
+  display: inline-block;
+}
+
+/* On mouse-over, add a deeper shadow */
+.card:hover {
+  box-shadow: 0 8px 16px 0 rgba(0,0,0,0.2);
+}
+
+/* Add some padding inside the card container */
+.container {
+  padding: 2px 16px;
+}
+
+.card-img {
+  height: 600px;
+  padding: 20px;
+}
+
+#content {
+  @include small{
+    margin-top: 24rem;
+  }
+  @include medium{
+    margin-top: 31rem;
+  }
+  @include large {
+    margin-top: 29rem;
+  }
+}
+
+.main-content h2 {
+  color: rgb(104, 36, 109);
+  font-weight: bold;
+}
+
+h2.project-tagline {
+  color: #fff;
+}
+a.author-name{
+    color: white;
+}
+
+* {box-sizing:border-box}
+
+/* Slideshow container */
+.slideshow-container {
+  max-height: 600px;
+  position: relative;
+  margin: auto;
+}
+
+/* Hide the images by default */
+.mySlides {
+  display: none;
+  text-align: center;
+}
+
+/* Next & previous buttons */
+.prev, .next {
+  cursor: pointer;
+  position: absolute;
+  top: 50%;
+  width: auto;
+  margin-top: -22px;
+  padding: 16px;
+  color: white;
+  font-weight: bold;
+  font-size: 18px;
+  transition: 0.6s ease;
+  border-radius: 0 3px 3px 0;
+  user-select: none;
+  background-color: rgba(104, 36, 109,0.5);
+}
+
+/* Position the "next button" to the right */
+.next {
+  right: 0;
+  border-radius: 3px 0 0 3px;
+}
+
+/* On hover, add a black background color with a little bit see-through */
+.prev:hover, .next:hover {
+  background-color: rgba(104, 36, 109,0.9);
+}
+
+/* Caption text */
+.text {
+  color: #f2f2f2;
+  font-size: 15px;
+  padding: 8px 12px;
+  position: absolute;
+  bottom: 8px;
+  width: 100%;
+  text-align: center;
+}
+
+/* Number text (1/3 etc) */
+.numbertext {
+  color: black;
+  font-size: 12px;
+  padding: 8px 12px;
+  position: absolute;
+  top: 0;
+}
+
+/* The dots/bullets/indicators */
+.dot {
+  cursor: pointer;
+  height: 15px;
+  width: 15px;
+  margin: 0 2px;
+  background-color: #bbb;
+  border-radius: 50%;
+  display: inline-block;
+  transition: background-color 0.6s ease;
+}
+
+.active, .dot:hover {
+  background-color: #717171;
+}
+
+/* Fading animation */
+.fade {
+  animation-name: fade;
+  animation-duration: 1.5s;
+}
+
+@keyframes fade {
+  from {opacity: .4}
+  to {opacity: 1}
+}
+
+/* Collapsible nav-bar */
+header.page-header{
+    overflow: hidden;
+    transition: 0.3s;
+    width: 100%;
+    top: 0;
+    position: fixed;
+    padding: 20px 2.5rem;
+    background-image: url(/oln-ssos/images/banner1.jpg);
+    box-shadow: inset 0 0 0 2000px rgba(104, 36, 109, 0.9);
+    z-index: 1;
+  @include small {
+    height: 23rem;
+    max-height: 23rem;
+  }
+  @include medium {
+      height: 30rem;
+    max-height: 30rem;
+  }
+  @include large {
+    height: 28rem;
+    max-height: 28rem;
+  }
+
+
+}
+
+.links a img{
+  @include small{
+    height: 40px;
+  }
+  height: 60px;
+}
+.links h4{
+  color: white;
+  margin: 0px;
+}
+#authors{
+  transition: 0.4s;
+
+  @include small {
+      display: none;
+  }
+  @include medium {
+    display: flex;
+  }
+  @include large {
+    display: flex;
+  }
+}
+
+#small-authors{
+  transition: 0.4s;
+
+  @include small {
+      display: block;
+  }
+
+  @include medium {
+    display: none;
+  }
+  @include large {
+    display: none;
+  }
+}
+
+.small-author-name{
+  color: white;
+  font-size: 0.75rem;
+  text-decoration: underline;
+}
+
+// underline
+#authors h3{
+    text-decoration: underline;
+  @include small {
+        font-size: 0.55rem;
+    }
+  @include medium {
+    font-size: 1.15rem;
+  }
+  @include large {
+    font-size: 1.15rem;
+  }
+
+
+}
+
+#authors p{
+  white-space: nowrap;
+  overflow: hidden;
+  @include small {
+        font-size: 0.55rem;
+    }
+}
+
+#links{
+  transition: 0.4s;
+  margin-top: 10px;
+}
+
+#collapsed-authors{
+  opacity: 0;
+  font-size: small;
+  transition: 0.3s;
+  visibility: hidden;
+  display: none;
+    font-weight: normal;
+
+  @include small{
+    font-size: 0.65rem;
+  }
+}
+
+.project-name {
+  margin-top: 0;
+  margin-bottom: 0.1rem;
+
+  @include small {
+    font-size: 1.33rem;
+  }
+
+  @include medium {
+    font-size: 2.25rem;
+  }
+
+  @include large {
+    font-size: 3.25rem;
+  }
+
+}
