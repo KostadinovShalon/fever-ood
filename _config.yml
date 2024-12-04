@@ -18,32 +18,35 @@
 # You can create any custom variable you would like, and they will be accessible
 # in the templates via {{ site.myvariable }}.
 
-title: "Towards Open-World Object-based Anomaly Detection via Self-Supervised Outlier Synthesis"
+title: "FEVER-OOD: Free Energy Vulnerability Elimination for Robust Out-of-Distribution Detection"
 email: your-email@example.com
-description: >- # this means to ignore newlines until "baseurl:"
-  Accepted at ECCV 2024
+#description: >- # this means to ignore newlines until "baseurl:"
+#  Accepted at ECCV 2024
 # baseurl: "" # the subpath of your site, e.g. /blog
 url: "" # the base hostname & protocol for your site, e.g. http://example.com
-collapsed-authors-list: B.K.S. Isaac-Medina, Y.F.A. Gaus, N. Bhowmik, T.P. Breckon
+collapsed-authors-list: B.K.S. Isaac-Medina, M. Che, Y.F.A. Gaus, S. Akcay, T.P. Breckon
 authors:
   - link: https://kostadinovshalon.github.io
     name: Brian K. S. Isaac-Medina
     institution: Durham University
+  - link: https://sites.google.com/view/mauriciochemoguel/home
+    name: Mauricio Che
+    institution: University of Vienna
   - link: https://yonafalinie.github.io/
     name: Yona Falinie Abd. Gaus
     institution: Durham University
-  - link: https://www.durham.ac.uk/staff/neelanjan-bhowmik/
-    name: Neelanjan Bhowmik
-    institution: Durham University
+  - link: https://github.com/samet-akcay
+    name: Samet Akcay
+    institution: Intel
   - link: https://breckon.org/breckon
     name: Toby P. Breckon
     institution: Durham University
 links:
   - img: images/paper-icon.png
-    link: https://arxiv.org/abs/2407.15763
+    link: https://arxiv.org/abs/2412.01596
     title: Paper
   - img: images/github-icon.png
-    link: https://github.com/KostadinovShalon/oln-ssos
+    link: https://github.com/KostadinovShalon/fever-ood
     title: Code
 #  - img: images/yt.ico
 #    link: https://youtu.be/1ck25jJdw7A

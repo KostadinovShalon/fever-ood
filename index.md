@@ -1,13 +1,13 @@
 ---
 layout: default
 ---
-<a href="images/architecture.jpg" target="_blank"><img src="images/architecture.jpg"/></a>
+<a href="images/energy_in_feature_space.png" target="_blank"><img src="images/energy_in_feature_space.png"/></a>
 
 ## Abstract
 
-Object detection is a pivotal task in computer vision that has received significant attention in previous years. Nonetheless, the capability of a detector to localise objects out of the training distribution remains unexplored. Whilst recent approaches in object-level out-of-distribution (OoD) detection heavily rely on class labels, such approaches contradict truly open-world scenarios where the class distribution is often unknown. In this context, anomaly detection focuses on detecting unseen instances rather than classifying detections as OoD. This work aims to bridge this gap by leveraging an open-world object detector and an OoD detector via virtual outlier synthesis. This is achieved by using the detector backbone features to first learn object pseudo-classes via self-supervision. These pseudo-classes serve as the basis for class-conditional virtual outlier sampling of anomalous features that are classified by an OoD head. Our approach empowers our overall object detector architecture to learn anomaly-aware feature representations without relying on class labels, hence enabling truly open-world object anomaly detection. Empirical validation of our approach demonstrates its effectiveness across diverse datasets encompassing various imaging modalities (visible, infrared, and X-ray). Moreover, our method establishes state-of-the-art performance on object-level anomaly detection, achieving an average recall score improvement of over 5.4% for natural images and 23.5% for a security X-ray dataset compared to the current approaches. In addition, our method detects anomalies in datasets where current approaches fail.
+Modern machine learning models, that excel on computer vision tasks such as classification and object detection, are often overconfident in their predictions for Out-of-Distribution (OOD) examples, resulting in unpredictable behaviour for open-set environments. Recent works have demonstrated that the free energy score is an effective measure of uncertainty for OOD detection given its close relationship to the data distribution. However, despite free energy-based methods representing a significant empirical advance in OOD detection, our theoretical analysis reveals previously unexplored and inherent vulnerabilities within the free energy score formulation such that in-distribution and OOD instances can have distinct feature representations yet identical free energy scores. This phenomenon occurs when the vector direction representing the feature space difference between the in-distribution and OOD sample lies within the null space of the last layer of a neural-based classifier. To mitigate these issues, we explore lower-dimensional feature spaces to reduce the null space footprint and introduce novel regularisation to maximize the least singular value of the final linear layer, hence enhancing inter-sample free energy separation. We refer to these techniques as Free Energy Vulnerability Elimination for Robust Out-of-Distribution Detection (FEVER-OOD). Our experiments show that FEVER-OOD techniques achieve state of the art OOD detection in Imagenet-100, with average OOD false positive rate (at 95% true positive rate) of 35.83% when used with the baseline Dream-OOD model.
 
-<a href="images/poster.pdf" target="_blank"><img src="images/poster.jpg"/></a>
+[//]: # (<a href="images/small_architecture.png" target="_blank"><img src="images/small_architecture.png"/></a>)
 
 ## Results
 
@@ -15,9 +15,9 @@ Object detection is a pivotal task in computer vision that has received signific
   <div class="mySlides fade">
     <div class="numbertext">1 / 4</div>
     <div class="card">
-        <a href="images/voc_qual.jpg" target="_blank"><img class='card-img' src="images/voc_qual.jpg"/></a>
+        <a href="images/mscoco_vos.jpg" target="_blank"><img class='card-img' src="images/mscoco_vos.jpg"/></a>
         <div class="card-container">
-            <h4>VOC/COCO</h4>
+            <h4>ID:PASCAL VOC, OOD:MSCOCO</h4>
         </div>
     </div>
   </div>
@@ -25,9 +25,9 @@ Object detection is a pivotal task in computer vision that has received signific
   <div class="mySlides fade">
     <div class="numbertext">2 / 4</div>
     <div class="card">
-        <a href="images/bdd_qual.jpg" target="_blank"><img class='card-img' src="images/bdd_qual.jpg"/></a>
+        <a href="images/mscoco_ffs.jpg" target="_blank"><img class='card-img' src="images/mscoco_ffs.jpg"/></a>
         <div class="card-container">
-            <h4>BDD/COCO</h4>
+            <h4>ID:PASCAL VOC, OOD:MSCOCO</h4>
         </div>
     </div>
   </div>
@@ -35,9 +35,9 @@ Object detection is a pivotal task in computer vision that has received signific
 <div class="mySlides fade">
     <div class="numbertext">3 / 4</div>
     <div class="card">
-        <a href="images/dbf6_qual.jpg" target="_blank"><img class='card-img' src="images/dbf6_qual.jpg"/></a>
+        <a href="images/openimages_vos.jpg" target="_blank"><img class='card-img' src="images/openimages_vos.jpg"/></a>
         <div class="card-container">
-            <h4>DBF6</h4>
+            <h4>ID:PASCAL VOC, OOD:OpenImages</h4>
         </div>
     </div>
   </div>
@@ -45,9 +45,9 @@ Object detection is a pivotal task in computer vision that has received signific
 <div class="mySlides fade">
     <div class="numbertext">4 / 4</div>
     <div class="card">
-        <a href="images/ltd_qual.jpg" target="_blank"><img class='card-img' src="images/ltd_qual.jpg"/></a>
+        <a href="images/openimages_ffs.jpg" target="_blank"><img class='card-img' src="images/openimages_ffs.jpg"/></a>
         <div class="card-container">
-            <h4>LTDImaging</h4>
+            <h4>ID:PASCAL VOC, OOD:OpenImages</h4>
         </div>
     </div>
   </div>
@@ -69,17 +69,10 @@ Object detection is a pivotal task in computer vision that has received signific
 
 ## Citation
     {% raw %}
-    @inproceedings{isaac-medina24oln-ssos,
-     author = {Isaac-Medina, B.K.S. and Gaus, Y.F.A. and Bhowmik, N. and Breckon, T.P.},
-     title = {Towards Open-World Object-based Anomaly Detection via Self-Supervised Outlier Synthesis},
-     booktitle = {Proc. European Conference on Computer Vision },
-     year = {2024},
-     month = {September},
-     publisher = {Springer},
-     keywords = {x-ray, thermal, anomaly detection, open world object detection, open-set anonaly detection, object-wise anomaly detection},
-     url = {https://breckon.org/toby/publications/papers/isaac24ssos.pdf},
-     arxiv = {https://arxiv.org/abs/2407.15763},
-     note = {to appear},
-     category = {anomaly baggage automotive},
-    }
+    @article{isaac-medina24fever-ood, 
+    author = {Isaac-Medina, B.K.S. and Che, M. and Gaus, Y.F.A. and Akcay, S. and Breckon, T.P.}, 
+    title = {FEVER-OOD: Free Energy Vulnerability Elimination for Robust Out-of-Distribution Detection}, 
+    journal={arXiv preprint arXiv:2412.01596}, 
+    year = {2024}, 
+    month = {December}, }
     {% endraw %}
