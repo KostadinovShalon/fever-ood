@@ -1,5 +1,5 @@
 # FEVER-OOD: Free Energy Vulnerability Elimination for Robust Out-of-Distribution Detection
-Implementation of ![FEVER-OOD](https://arxiv.org/abs/2412.01596) coming soon!
+Implementation of [FEVER-OOD](https://arxiv.org/abs/2412.01596) coming soon!
 
 ## Citation
 You can cite this work as follows:
