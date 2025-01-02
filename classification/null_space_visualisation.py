@@ -15,13 +15,6 @@ from models.densenet import DenseNet3
 from models.wrn import WideResNet
 from utils import svhn_loader as svhn
 
-# if __package__ is None:
-#     import sys
-#     from os import path
-#     sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))
-#     import utils.svhn_loader as svhn
-#     import utils.lsun_loader as lsun_loader
-#     import utils.score_calculation as lib
 
 parser = argparse.ArgumentParser(description='Visualize the features of a CIFAR OOD Detector',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)

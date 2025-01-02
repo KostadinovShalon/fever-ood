@@ -10,12 +10,13 @@ import torch.backends.cudnn as cudnn
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.datasets as dset
-import torchvision.transforms as trn
 from FrEIA.framework import InputNode, Node, OutputNode, GraphINN
 from FrEIA.modules import GLOWCouplingBlock, PermuteRandom
 
-from models.wrn_virtual import WideResNet, VirtualResNet50
-from utils.validation_dataset import validation_split
+from utils.training import VirtualDataParallel
+from utils import training as utils_training
+from models.resnet import VirtualResNet50
+from models.wrn import WideResNet
 
 parser = argparse.ArgumentParser(description='Trains a CIFAR Classifier',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -32,10 +33,12 @@ parser.add_argument('--batch_size', '-b', type=int, default=128, help='Batch siz
 parser.add_argument('--test_bs', type=int, default=200)
 parser.add_argument('--momentum', type=float, default=0.9, help='Momentum.')
 parser.add_argument('--decay', '-d', type=float, default=0.0005, help='Weight decay (L2 penalty).')
+
 # WRN Architecture
 parser.add_argument('--layers', default=40, type=int, help='total number of layers')
 parser.add_argument('--widen-factor', default=2, type=int, help='widen factor')
 parser.add_argument('--droprate', default=0.3, type=float, help='dropout probability')
+
 # Checkpoints
 parser.add_argument('--save', '-s', type=str, default='./snapshots/baseline', help='Folder to save checkpoints.')
 parser.add_argument('--load', '-l', type=str, default='', help='Checkpoint path to resume / test.')
@@ -43,7 +46,8 @@ parser.add_argument('--test', '-t', action='store_true', help='Test only flag.')
 # Acceleration
 parser.add_argument('--ngpu', type=int, default=1, help='0 = CPU.')
 parser.add_argument('--prefetch', type=int, default=4, help='Pre-fetching threads.')
-# energy reg
+
+# VOS/FFS params
 parser.add_argument('--start_epoch', type=int, default=40)
 parser.add_argument('--sample_number', type=int, default=1000)
 parser.add_argument('--select', type=int, default=1)
@@ -59,47 +63,30 @@ args = parser.parse_args()
 state = {k: v for k, v in args._get_kwargs()}
 print(state)
 
+
 def seed_worker(worker_id):
-    worker_seed = torch.initial_seed() % 2**32
+    worker_seed = torch.initial_seed() % 2 ** 32
     np.random.seed(worker_seed)
     random.seed(worker_seed)
 
+
+# Random seeds
 g = torch.Generator()
 g.manual_seed(0)
-
-
 torch.manual_seed(1)
 np.random.seed(1)
 random.seed(0)
 
-# mean and standard deviation of channels of CIFAR-10 images
-mean = [x / 255 for x in [125.3, 123.0, 113.9]]
-std = [x / 255 for x in [63.0, 62.1, 66.7]]
-
-train_transform = trn.Compose([trn.RandomHorizontalFlip(), trn.RandomCrop(32, padding=4),
-                               trn.ToTensor(), trn.Normalize(mean, std)])
-test_transform = trn.Compose([trn.ToTensor(), trn.Normalize(mean, std)])
-in_train_transform = trn.Compose([
-        trn.Resize(size=224, interpolation=trn.InterpolationMode.BICUBIC),
-        trn.RandomResizedCrop(size=(224, 224), scale=(0.5, 1), interpolation=trn.InterpolationMode.BICUBIC),
-        trn.RandomHorizontalFlip(p=0.5),
-        trn.ToTensor(),
-        trn.Normalize(mean=(0.48145466, 0.4578275, 0.40821073), std=(0.26862954, 0.26130258, 0.27577711))
-    ])
-in_test_transform = trn.Compose([
-    trn.Resize(size=(224, 224), interpolation=trn.InterpolationMode.BICUBIC),
-    trn.CenterCrop(size=(224, 224)),
-    trn.ToTensor(),
-    trn.Normalize(mean=(0.48145466, 0.4578275, 0.40821073), std=(0.26862954, 0.26130258, 0.27577711))
-])
+cifar_train_transform, cifar_test_transform = utils_training.get_cifar_transforms()
+in_train_transform, in_test_transform = utils_training.get_in_transforms()
 
 if args.dataset == 'cifar10':
-    train_data = dset.CIFAR10(f'{args.root}/cifarpy', train=True, transform=train_transform, download=True)
-    test_data = dset.CIFAR10(f'{args.root}/cifarpy', train=False, transform=test_transform, download=True)
+    train_data = dset.CIFAR10(f'{args.root}/cifarpy', train=True, transform=cifar_train_transform, download=True)
+    test_data = dset.CIFAR10(f'{args.root}/cifarpy', train=False, transform=cifar_test_transform, download=True)
     num_classes = 10
 elif args.dataset == 'cifar100':
-    train_data = dset.CIFAR100(f'{args.root}/cifarpy', train=True, transform=train_transform, download=True)
-    test_data = dset.CIFAR100(f'{args.root}/cifarpy', train=False, transform=test_transform, download=True)
+    train_data = dset.CIFAR100(f'{args.root}/cifarpy', train=True, transform=cifar_train_transform, download=True)
+    test_data = dset.CIFAR100(f'{args.root}/cifarpy', train=False, transform=cifar_test_transform, download=True)
     num_classes = 100
 elif args.dataset == 'imagenet-1k':
     train_data = dset.ImageFolder(f'{args.root}/imagenet-1k/train', transform=in_train_transform)
@@ -112,19 +99,14 @@ elif args.dataset == 'imagenet-100':
 else:
     raise ValueError('Unknown dataset')
 
-calib_indicator = ''
-if args.calibration:
-    train_data, val_data = validation_split(train_data, val_share=0.1)
-    calib_indicator = '_calib'
-
 train_loader = torch.utils.data.DataLoader(
     train_data, batch_size=args.batch_size, shuffle=True,
     num_workers=args.prefetch, pin_memory=True, generator=g,
-    worker_init_fn=seed_worker,)
+    worker_init_fn=seed_worker, )
 test_loader = torch.utils.data.DataLoader(
     test_data, batch_size=args.test_bs, shuffle=False,
     num_workers=args.prefetch, pin_memory=True, generator=g,
-    worker_init_fn=seed_worker,)
+    worker_init_fn=seed_worker, )
 
 # Create model
 if args.model == 'rn50':
@@ -141,39 +123,18 @@ def subnet_fc(c_in, c_out):
     return nn.Sequential(nn.Linear(c_in, 2048), nn.ReLU(), nn.Linear(2048, c_out))
 
 
-if args.dataset == 'cifar10':
-    num_classes = 10
-else:
-    num_classes = 100
+def nll(z, sldj):
+    """Negative log-likelihood loss assuming isotropic gaussian with unit norm.
+      See Also:
+          Equation (3) in the RealNVP paper: https://arxiv.org/abs/1605.08803
+    """
+    prior_ll = -0.5 * (z ** 2 + np.log(2 * np.pi))
+    prior_ll = prior_ll.flatten(1).sum(-1) - np.log(256) * np.prod(z.size()[1:])
+    ll = prior_ll + sldj
+    return -ll
+
 
 n_fts = net.nChannels if args.null_space_red_dim <= 0 else args.null_space_red_dim
-
-
-def NLLLoss(z, sldj):
-    """Negative log-likelihood loss assuming isotropic gaussian with unit norm.
-
-      See Also:
-          Equation (3) in the RealNVP paper: https://arxiv.org/abs/1605.08803
-    """
-    prior_ll = -0.5 * (z ** 2 + np.log(2 * np.pi))
-    prior_ll = prior_ll.flatten(1).sum(-1) - np.log(256) * np.prod(z.size()[1:])
-    ll = prior_ll + sldj
-    nll = -ll.mean()
-    return nll
-
-
-def NLL(z, sldj):
-    """Negative log-likelihood loss assuming isotropic gaussian with unit norm.
-      See Also:
-          Equation (3) in the RealNVP paper: https://arxiv.org/abs/1605.08803
-    """
-    prior_ll = -0.5 * (z ** 2 + np.log(2 * np.pi))
-    prior_ll = prior_ll.flatten(1).sum(-1) - np.log(256) * np.prod(z.size()[1:])
-    ll = prior_ll + sldj
-    nll = -ll
-    return nll
-
-
 flow_model = None
 if args.use_ffs:
     in1 = InputNode(n_fts, name='input1')
@@ -191,10 +152,10 @@ start_epoch = 0
 # Restore model if desired
 if args.load != '':
     for i in range(1000 - 1, -1, -1):
-        model_name = os.path.join(args.load, args.dataset + calib_indicator + '_' + args.model +
+        model_name = os.path.join(args.load, args.dataset + '_' + args.model +
                                   '_baseline_epoch_' + str(i) + '.pt')
         if os.path.isfile(model_name):
-            net.load_state_dict(torch.load(model_name))
+            net.load_state_dict(torch.load(str(model_name)))
             print('Model restored! Epoch:', i)
             start_epoch = i + 1
             break
@@ -202,7 +163,7 @@ if args.load != '':
         assert False, "could not resume"
 
 if args.ngpu > 1:
-    net = torch.nn.DataParallel(net, device_ids=list(range(args.ngpu)))
+    net = VirtualDataParallel(net, device_ids=list(range(args.ngpu)))
 
 if args.ngpu > 0:
     net.cuda()
@@ -226,46 +187,10 @@ optimizer = torch.optim.SGD(
     list(net.parameters()) + list(weight_energy.parameters()) + \
     list(logistic_regression.parameters()), state['learning_rate'], momentum=state['momentum'],
     weight_decay=state['decay'], nesterov=True)
-
-
-def cosine_annealing(step, total_steps, lr_max, lr_min):
-    return lr_min + (lr_max - lr_min) * 0.5 * (
-            1 + np.cos(step / total_steps * np.pi))
-
-
-scheduler = torch.optim.lr_scheduler.LambdaLR(
-    optimizer,
-    lr_lambda=lambda step: cosine_annealing(
-        step,
-        args.epochs * len(train_loader),
-        1,  # since lr_lambda computes multiplicative factor
-        1e-6 / args.learning_rate))
-
-
-def log_sum_exp(value, dim=None, keepdim=False):
-    """Numerically stable implementation of the operation
-
-    value.exp().sum(dim, keepdim).log()
-    """
-    # TODO: torch.max(value, dim=None) threw an error at time of writing
-    if dim is not None:
-        m, _ = torch.max(value, dim=dim, keepdim=True)
-        value0 = value - m
-        if keepdim is False:
-            m = m.squeeze(dim)
-        return m + torch.log(torch.sum(
-            F.relu(weight_energy.weight) * torch.exp(value0), dim=dim, keepdim=keepdim))
-    else:
-        m = torch.max(value)
-        sum_exp = torch.sum(torch.exp(value - m))
-        # if isinstance(sum_exp, Number):
-        #     return m + math.log(sum_exp)
-        # else:
-        return m + torch.log(sum_exp)
+scheduler = utils_training.get_scheduler(optimizer, args.epochs, args.learning_rate, train_loader)
 
 
 # /////////////// Training ///////////////
-
 def train(epoch):
     net.train()  # enter train mode
     loss_avg = 0.0
@@ -283,8 +208,7 @@ def train(epoch):
             sum_temp += number_dict[index]
         lr_reg_loss = torch.zeros(1).cuda()[0]
         ########################################################################################
-
-        #############################    Flow Feature Synthesis      ###########################
+        #                               Flow Feature Synthesis                                 #
         ########################################################################################
         nll_loss = torch.zeros(1).cuda()[0]
         if sum_temp == num_classes * args.sample_number and epoch < args.start_epoch:
@@ -292,7 +216,7 @@ def train(epoch):
             target_numpy = target.cpu().data.numpy()
             if args.use_ffs:
                 z, sldj = flow_model(output.detach().cuda())
-                nll_loss = NLLLoss(z, sldj)
+                nll_loss = nll(z, sldj).mean()
             else:
                 for index in range(len(target)):
                     dict_key = target_numpy[index]
@@ -301,7 +225,7 @@ def train(epoch):
         elif sum_temp == num_classes * args.sample_number and epoch >= args.start_epoch:
             if args.use_ffs:
                 z, sldj = flow_model(output.detach().cuda())
-                nll_loss = NLLLoss(z, sldj)
+                nll_loss = nll(z, sldj).mean()
 
                 # randomly sample from latent space of flow model
                 with torch.no_grad():
@@ -309,7 +233,7 @@ def train(epoch):
                     negative_samples, _ = flow_model(z_randn, rev=True)
                     # negative_samples = torch.sigmoid(negative_samples)
                     _, sldj_neg = flow_model(negative_samples)
-                    nll_neg = NLL(z_randn, sldj_neg)
+                    nll_neg = nll(z_randn, sldj_neg)
                     cur_samples, index_prob = torch.topk(nll_neg, args.select)
                     ood_samples = negative_samples[index_prob].view(1, -1)
                     # ood_samples = torch.squeeze(ood_samples)
@@ -352,13 +276,13 @@ def train(epoch):
                 # add some gaussian noise
                 # ood_samples = self.noise(ood_samples)
                 # energy_score_for_fg = 1 * torch.logsumexp(predictions[0][selected_fg_samples][:, :-1] / 1, 1)
-                energy_score_for_fg = log_sum_exp(x, 1)
+                energy_score_for_fg = utils_training.log_sum_exp(x, weight_energy, 1)
                 if args.null_space_red_dim > 0:
                     predictions_ood = net.fc[2](ood_samples)
                 else:
                     predictions_ood = net.fc(ood_samples)
                 # energy_score_for_bg = 1 * torch.logsumexp(predictions_ood[0][:, :-1] / 1, 1)
-                energy_score_for_bg = log_sum_exp(predictions_ood, 1)
+                energy_score_for_bg = utils_training.log_sum_exp(predictions_ood, weight_energy, 1)
 
                 input_for_lr = torch.cat((energy_score_for_fg, energy_score_for_bg), -1)
                 labels_for_lr = torch.cat((torch.ones(len(output)).cuda(),
@@ -449,10 +373,10 @@ if not os.path.exists(args.save):
 if not os.path.isdir(args.save):
     raise Exception('%s is not a dir' % args.save)
 
-fn = args.dataset + calib_indicator + '_' + args.model + \
-                             '_' + str(args.loss_weight) + \
-                             '_' + str(args.sample_number) + '_' + str(args.start_epoch) + '_' + \
-                             str(args.select) + '_' + str(args.sample_from)
+fn = args.dataset + '_' + args.model + \
+     '_' + str(args.loss_weight) + \
+     '_' + str(args.sample_number) + '_' + str(args.start_epoch) + '_' + \
+     str(args.select) + '_' + str(args.sample_from)
 if args.smin_loss_weight > 0:
     fn += f'_smin{args.smin_loss_weight}_cond{args.use_conditioning}'
 if args.use_ffs:
@@ -472,7 +396,7 @@ for epoch in range(start_epoch, args.epochs):
 
     train(epoch)
     test()
-    model_name = args.dataset + calib_indicator + '_' + args.model + \
+    model_name = args.dataset + '_' + args.model + \
                  '_baseline' + '_' + str(args.loss_weight) + \
                  '_' + str(args.sample_number) + '_' + str(args.start_epoch) + '_' + \
                  str(args.select) + '_' + str(args.sample_from)
