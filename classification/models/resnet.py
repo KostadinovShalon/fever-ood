@@ -6,9 +6,10 @@ Adapted from: https://github.com/bearpaw/pytorch-classification
 """
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from torchvision.models import ResNet as tv_resnet
-from torchvision.models.resnet import Bottleneck as tv_bottleneck
+import torch.nn.functional as F  # noqa
+from torchvision.models import ResNet as TVResNet
+from torchvision.models.resnet import Bottleneck as TVBottleneck  # noqa
+from torchvision.models.resnet import BasicBlock as TVBasicBlock  # noqa
 
 
 class BasicBlock(nn.Module):
@@ -237,16 +238,17 @@ class LinearClassifier(nn.Module):
         return self.fc(features)
 
 
-class VirtualResNet50(tv_resnet):
-    def __init__(self, num_classes, null_space_red_dim=-1):
-        super().__init__(block=tv_bottleneck, layers=[3, 4, 6, 3], num_classes=num_classes)
+class VirtualResNet(TVResNet):
+
+    def __init__(self, block, layers, num_classes, null_space_red_dim=-1):
+        super().__init__(block=block, layers=layers, num_classes=num_classes)
         self.null_space_red_dim = null_space_red_dim
         if null_space_red_dim > 0:
             self.fc = nn.Sequential(
-                nn.Linear(512 * tv_bottleneck.expansion, null_space_red_dim),
+                nn.Linear(512 * block.expansion, null_space_red_dim),
                 nn.ReLU(inplace=True),
                 nn.Linear(null_space_red_dim, num_classes))
-        self.nChannels = 512 * tv_bottleneck.expansion
+        self.nChannels = 512 * block.expansion
 
     def forward_virtual(self, x):
         # See note [TorchScript super()]
@@ -269,3 +271,19 @@ class VirtualResNet50(tv_resnet):
             return self.fc[2](x), x
 
         return self.fc(x), x
+
+
+class VirtualResNet50(VirtualResNet):
+    def __init__(self, num_classes, null_space_red_dim=-1):
+        super().__init__(block=TVBottleneck,
+                         layers=[3, 4, 6, 3],
+                         num_classes=num_classes,
+                         null_space_red_dim=null_space_red_dim)
+
+
+class VirtualResNet34(VirtualResNet):
+    def __init__(self, num_classes, null_space_red_dim=-1):
+        super().__init__(block=TVBasicBlock,
+                         layers=[3, 4, 6, 3],
+                         num_classes=num_classes,
+                         null_space_red_dim=null_space_red_dim)
