@@ -15,17 +15,17 @@ from FrEIA.modules import GLOWCouplingBlock, PermuteRandom
 
 from utils.training import VirtualDataParallel
 from utils import training as utils_training
-from models.resnet import VirtualResNet50
+from models.resnet import VirtualResNet50, VirtualResNet34
 from models.wrn import WideResNet
 
-parser = argparse.ArgumentParser(description='Trains a CIFAR Classifier',
+parser = argparse.ArgumentParser(description='Trains a Classifier with VOS/FFS for OOD Detection',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('--dataset', type=str, choices=['cifar10', 'cifar100', 'imagenet-1k', 'imagenet-100'],
                     help='Choose between CIFAR-10, CIFAR-100, Imagenet-100, Imagenet-1k.')
+parser.add_argument('--data-root', type=str, default='./data')
 parser.add_argument('--model', '-m', type=str, default='wrn',
-                    choices=['wrn', 'rn50'], help='Choose architecture.')
-parser.add_argument('--calibration', '-c', action='store_true',
-                    help='Train a model to be used for calibration. This holds out some data for validation.')
+                    choices=['wrn', 'rn34', 'rn50'], help='Choose architecture.')
+parser.add_argument('--seed', type=int, default=42, help='Random seed.')
 # Optimization options
 parser.add_argument('--epochs', '-e', type=int, default=100, help='Number of epochs to train.')
 parser.add_argument('--learning_rate', '-lr', type=float, default=0.1, help='The initial learning rate.')
@@ -35,9 +35,9 @@ parser.add_argument('--momentum', type=float, default=0.9, help='Momentum.')
 parser.add_argument('--decay', '-d', type=float, default=0.0005, help='Weight decay (L2 penalty).')
 
 # WRN Architecture
-parser.add_argument('--layers', default=40, type=int, help='total number of layers')
-parser.add_argument('--widen-factor', default=2, type=int, help='widen factor')
-parser.add_argument('--droprate', default=0.3, type=float, help='dropout probability')
+parser.add_argument('--wrn-layers', default=40, type=int, help='total number of layers')
+parser.add_argument('--wrn-widen-factor', default=2, type=int, help='widen factor')
+parser.add_argument('--wrn-droprate', default=0.3, type=float, help='dropout probability')
 
 # Checkpoints
 parser.add_argument('--save', '-s', type=str, default='./snapshots/baseline', help='Folder to save checkpoints.')
@@ -48,16 +48,17 @@ parser.add_argument('--ngpu', type=int, default=1, help='0 = CPU.')
 parser.add_argument('--prefetch', type=int, default=4, help='Pre-fetching threads.')
 
 # VOS/FFS params
-parser.add_argument('--start_epoch', type=int, default=40)
-parser.add_argument('--sample_number', type=int, default=1000)
-parser.add_argument('--select', type=int, default=1)
-parser.add_argument('--sample_from', type=int, default=10000)
-parser.add_argument('--loss_weight', type=float, default=0.1)
-parser.add_argument('--root', type=str, default='./data')
+parser.add_argument('--vos-start-epoch', type=int, default=40)
+parser.add_argument('--vos-sample-number', type=int, default=1000)
+parser.add_argument('--vos-select', type=int, default=1)
+parser.add_argument('--vos-sample-from', type=int, default=10000)
+parser.add_argument('--vos-loss-weight', type=float, default=0.1)
+parser.add_argument('--use_ffs', action='store_true')
+
+# Fever-OOD params
 parser.add_argument('--smin_loss_weight', type=float, default=0.0)
 parser.add_argument('--use_conditioning', action='store_true')
-parser.add_argument('--use_ffs', action='store_true')
-parser.add_argument('--null_space_red_dim', type=int, default=-1)
+parser.add_argument('--null-space-red-dim', type=int, default=-1)
 
 args = parser.parse_args()
 state = {k: v for k, v in args._get_kwargs()}
@@ -70,31 +71,59 @@ def seed_worker(worker_id):
     random.seed(worker_seed)
 
 
+# FFS Functions
+def subnet_fc(c_in, c_out):
+    return nn.Sequential(nn.Linear(c_in, 2048), nn.ReLU(), nn.Linear(2048, c_out))
+
+
+def build_ffs_flow(n_fts):
+    in1 = InputNode(n_fts, name='input1')
+    layer1 = Node(in1, GLOWCouplingBlock, {'subnet_constructor': subnet_fc, 'clamp': 2.0},
+                  name=F'coupling_{0}')
+    layer2 = Node(layer1, PermuteRandom, {'seed': 0}, name=F'permute_{0}')
+    layer3 = Node(layer2, GLOWCouplingBlock, {'subnet_constructor': subnet_fc, 'clamp': 2.0},
+                  name=F'coupling_{1}')
+    layer4 = Node(layer3, PermuteRandom, {'seed': 1}, name=F'permute_{1}')
+    out1 = OutputNode(layer4, name='output1')
+    flow = GraphINN([in1, layer1, layer2, layer3, layer4, out1])
+    return flow
+
+def nll(z, sldj):
+    """Negative log-likelihood loss assuming isotropic gaussian with unit norm.
+      See Also:
+          Equation (3) in the RealNVP paper: https://arxiv.org/abs/1605.08803
+    """
+    prior_ll = -0.5 * (z ** 2 + np.log(2 * np.pi))
+    prior_ll = prior_ll.flatten(1).sum(-1) - np.log(256) * np.prod(z.size()[1:])
+    ll = prior_ll + sldj
+    return -ll
+
+
 # Random seeds
 g = torch.Generator()
-g.manual_seed(0)
-torch.manual_seed(1)
-np.random.seed(1)
-random.seed(0)
+g.manual_seed(args.seed)
+torch.manual_seed(args.seed)
+np.random.seed(args.seed)
+random.seed(args.seed)
 
 cifar_train_transform, cifar_test_transform = utils_training.get_cifar_transforms()
 in_train_transform, in_test_transform = utils_training.get_in_transforms()
 
 if args.dataset == 'cifar10':
-    train_data = dset.CIFAR10(f'{args.root}/cifarpy', train=True, transform=cifar_train_transform, download=True)
-    test_data = dset.CIFAR10(f'{args.root}/cifarpy', train=False, transform=cifar_test_transform, download=True)
+    train_data = dset.CIFAR10(f'{args.data_root}/cifarpy', train=True, transform=cifar_train_transform, download=True)
+    test_data = dset.CIFAR10(f'{args.data_root}/cifarpy', train=False, transform=cifar_test_transform, download=True)
     num_classes = 10
 elif args.dataset == 'cifar100':
-    train_data = dset.CIFAR100(f'{args.root}/cifarpy', train=True, transform=cifar_train_transform, download=True)
-    test_data = dset.CIFAR100(f'{args.root}/cifarpy', train=False, transform=cifar_test_transform, download=True)
+    train_data = dset.CIFAR100(f'{args.data_root}/cifarpy', train=True, transform=cifar_train_transform, download=True)
+    test_data = dset.CIFAR100(f'{args.data_root}/cifarpy', train=False, transform=cifar_test_transform, download=True)
     num_classes = 100
 elif args.dataset == 'imagenet-1k':
-    train_data = dset.ImageFolder(f'{args.root}/imagenet-1k/train', transform=in_train_transform)
-    test_data = dset.ImageFolder(f'{args.root}/imagenet-1k/val', transform=in_test_transform)
+    train_data = dset.ImageFolder(f'{args.data_root}/imagenet-1k/train', transform=in_train_transform)
+    test_data = dset.ImageFolder(f'{args.data_root}/imagenet-1k/val', transform=in_test_transform)
     num_classes = 1000
 elif args.dataset == 'imagenet-100':
-    train_data = dset.ImageFolder(f'{args.root}/imagenet-100/train', transform=in_train_transform)
-    test_data = dset.ImageFolder(f'{args.root}/imagenet-100/val', transform=in_test_transform)
+    train_data = dset.ImageFolder(f'{args.data_root}/imagenet-100/train', transform=in_train_transform)
+    test_data = dset.ImageFolder(f'{args.data_root}/imagenet-100/val', transform=in_test_transform)
     num_classes = 100
 else:
     raise ValueError('Unknown dataset')
@@ -111,56 +140,30 @@ test_loader = torch.utils.data.DataLoader(
 # Create model
 if args.model == 'rn50':
     net = VirtualResNet50(num_classes, null_space_red_dim=args.null_space_red_dim)
+elif args.model == 'rn34':
+    net = VirtualResNet34(num_classes, null_space_red_dim=args.null_space_red_dim)
 else:
-    net = WideResNet(args.layers, num_classes, args.widen_factor, drop_rate=args.droprate,
+    net = WideResNet(args.wrn_layers, num_classes, args.wrn_widen_factor, drop_rate=args.wrn_droprate,
                      null_space_red_dim=args.null_space_red_dim)
 
 if args.null_space_red_dim > 0:
     args.model = f'{args.model}_nsr{args.null_space_red_dim}'
 
-
-def subnet_fc(c_in, c_out):
-    return nn.Sequential(nn.Linear(c_in, 2048), nn.ReLU(), nn.Linear(2048, c_out))
-
-
-def nll(z, sldj):
-    """Negative log-likelihood loss assuming isotropic gaussian with unit norm.
-      See Also:
-          Equation (3) in the RealNVP paper: https://arxiv.org/abs/1605.08803
-    """
-    prior_ll = -0.5 * (z ** 2 + np.log(2 * np.pi))
-    prior_ll = prior_ll.flatten(1).sum(-1) - np.log(256) * np.prod(z.size()[1:])
-    ll = prior_ll + sldj
-    return -ll
-
-
+# FFS
 n_fts = net.nChannels if args.null_space_red_dim <= 0 else args.null_space_red_dim
-flow_model = None
-if args.use_ffs:
-    in1 = InputNode(n_fts, name='input1')
-    layer1 = Node(in1, GLOWCouplingBlock, {'subnet_constructor': subnet_fc, 'clamp': 2.0},
-                  name=F'coupling_{0}')
-    layer2 = Node(layer1, PermuteRandom, {'seed': 0}, name=F'permute_{0}')
-    layer3 = Node(layer2, GLOWCouplingBlock, {'subnet_constructor': subnet_fc, 'clamp': 2.0},
-                  name=F'coupling_{1}')
-    layer4 = Node(layer3, PermuteRandom, {'seed': 1}, name=F'permute_{1}')
-    out1 = OutputNode(layer4, name='output1')
-    flow_model = GraphINN([in1, layer1, layer2, layer3, layer4, out1])
+flow_model = None if not args.use_ffs else build_ffs_flow(n_fts)
 
 start_epoch = 0
-
 # Restore model if desired
 if args.load != '':
-    for i in range(1000 - 1, -1, -1):
-        model_name = os.path.join(args.load, args.dataset + '_' + args.model +
-                                  '_baseline_epoch_' + str(i) + '.pt')
-        if os.path.isfile(model_name):
-            net.load_state_dict(torch.load(str(model_name)))
-            print('Model restored! Epoch:', i)
-            start_epoch = i + 1
-            break
-    if start_epoch == 0:
-        assert False, "could not resume"
+    model_name = args.load.split('/')[-1]
+    if 'epoch_' in model_name:
+        start_epoch = int(model_name.split('_')[-1].split('.')[0])
+    else:
+        print('No epoch number found in model name. Using epoch=0.')
+    if os.path.isfile(model_name):
+        net.load_state_dict(torch.load(str(model_name)))
+        print('Model restored! Epoch:', start_epoch)
 
 if args.ngpu > 1:
     net = VirtualDataParallel(net, device_ids=list(range(args.ngpu)))
@@ -169,22 +172,23 @@ if args.ngpu > 0:
     net.cuda()
     if flow_model is not None:
         flow_model.cuda()
-    torch.cuda.manual_seed(1)
+    torch.cuda.manual_seed(args.seed)
 
 cudnn.deterministic = True
-cudnn.benchmark = False  # fire on all cylinders
+cudnn.benchmark = False
 
+# VOS Weights
 weight_energy = torch.nn.Linear(num_classes, 1).cuda()
 torch.nn.init.uniform_(weight_energy.weight)
-data_dict = torch.zeros(num_classes, args.sample_number, n_fts).cuda()
-number_dict = {}
-for i in range(num_classes):
-    number_dict[i] = 0
 eye_matrix = torch.eye(n_fts, device='cuda')
 logistic_regression = torch.nn.Linear(1, 2)
 logistic_regression = logistic_regression.cuda()
+
+data_samples = [list() for _ in range(num_classes)]
+
+# Optimizer
 optimizer = torch.optim.SGD(
-    list(net.parameters()) + list(weight_energy.parameters()) + \
+    list(net.parameters()) + list(weight_energy.parameters()) +
     list(logistic_regression.parameters()), state['learning_rate'], momentum=state['momentum'],
     weight_decay=state['decay'], nesterov=True)
 scheduler = utils_training.get_scheduler(optimizer, args.epochs, args.learning_rate, train_loader)
@@ -203,15 +207,13 @@ def train(epoch):
         x, output = net.forward_virtual(data)
 
         # energy regularization.
-        sum_temp = 0
-        for index in range(num_classes):
-            sum_temp += number_dict[index]
+        num_sampled_objects = sum(len(data_sample) for data_sample in data_samples)
         lr_reg_loss = torch.zeros(1).cuda()[0]
         ########################################################################################
         #                               Flow Feature Synthesis                                 #
         ########################################################################################
         nll_loss = torch.zeros(1).cuda()[0]
-        if sum_temp == num_classes * args.sample_number and epoch < args.start_epoch:
+        if num_sampled_objects == num_classes * args.vos_sample_number and epoch < args.vos_start_epoch:
             # maintaining an ID data queue for each class.
             target_numpy = target.cpu().data.numpy()
             if args.use_ffs:
@@ -220,21 +222,21 @@ def train(epoch):
             else:
                 for index in range(len(target)):
                     dict_key = target_numpy[index]
-                    data_dict[dict_key] = torch.cat((data_dict[dict_key][1:],
-                                                     output[index].detach().view(1, -1)), 0)
-        elif sum_temp == num_classes * args.sample_number and epoch >= args.start_epoch:
+                    data_samples[dict_key].append(output[index].detach().view(1, -1))
+                    data_samples[dict_key] = data_samples[dict_key][1:]
+        elif num_sampled_objects == num_classes * args.vos_sample_number and epoch >= args.vos_start_epoch:
             if args.use_ffs:
                 z, sldj = flow_model(output.detach().cuda())
                 nll_loss = nll(z, sldj).mean()
 
                 # randomly sample from latent space of flow model
                 with torch.no_grad():
-                    z_randn = torch.randn((args.sample_from, 1024), dtype=torch.float32).cuda()
+                    z_randn = torch.randn((args.vos_sample_from, 1024), dtype=torch.float32).cuda()
                     negative_samples, _ = flow_model(z_randn, rev=True)
                     # negative_samples = torch.sigmoid(negative_samples)
                     _, sldj_neg = flow_model(negative_samples)
                     nll_neg = nll(z_randn, sldj_neg)
-                    cur_samples, index_prob = torch.topk(nll_neg, args.select)
+                    cur_samples, index_prob = torch.topk(nll_neg, args.vos_select)
                     ood_samples = negative_samples[index_prob].view(1, -1)
                     # ood_samples = torch.squeeze(ood_samples)
                     del negative_samples
@@ -243,36 +245,31 @@ def train(epoch):
                 target_numpy = target.cpu().data.numpy()
                 for index in range(len(target)):
                     dict_key = target_numpy[index]
-                    data_dict[dict_key] = torch.cat((data_dict[dict_key][1:],
-                                                     output[index].detach().view(1, -1)), 0)
-                # the covariance finder needs the data to be centered.
-                for index in range(num_classes):
-                    if index == 0:
-                        X = data_dict[index] - data_dict[index].mean(0)
-                        mean_embed_id = data_dict[index].mean(0).view(1, -1)
-                    else:
-                        X = torch.cat((X, data_dict[index] - data_dict[index].mean(0)), 0)
-                        mean_embed_id = torch.cat((mean_embed_id,
-                                                   data_dict[index].mean(0).view(1, -1)), 0)
+                    data_samples[dict_key].append(output[index].detach().view(1, -1))
+                    data_samples[dict_key] = data_samples[dict_key][1:]
 
-                ## add the variance.
-                temp_precision = torch.mm(X.t(), X) / len(X)
+                # the covariance finder needs the data to be centered.
+                data_tensor = torch.stack([torch.cat(data_samples[index]) for index in range(num_classes)], 0)
+                mean_embed_id = torch.mean(data_tensor, dim=1)
+                centered_data = data_tensor - mean_embed_id.view(num_classes, 1, -1)
+                centered_data = centered_data.flatten(0, -2)
+                # add the variance.
+                temp_precision = torch.mm(centered_data.t(), centered_data) / len(centered_data)
                 temp_precision += 0.0001 * eye_matrix
 
+                ood_samples = []
                 for index in range(num_classes):
                     new_dis = torch.distributions.multivariate_normal.MultivariateNormal(
                         mean_embed_id[index], covariance_matrix=temp_precision)
-                    negative_samples = new_dis.rsample((args.sample_from,))
+                    negative_samples = new_dis.rsample((args.vos_sample_from,))
                     prob_density = new_dis.log_prob(negative_samples)
                     # breakpoint()
                     # index_prob = (prob_density < - self.threshold).nonzero().view(-1)
                     # keep the data in the low density area.
-                    cur_samples, index_prob = torch.topk(- prob_density, args.select)
-                    if index == 0:
-                        ood_samples = negative_samples[index_prob]
-                    else:
-                        ood_samples = torch.cat((ood_samples, negative_samples[index_prob]), 0)
+                    cur_samples, index_prob = torch.topk(- prob_density, args.vos_select)
+                    ood_samples.append(negative_samples[index_prob])
             if len(ood_samples) != 0:
+                ood_samples = torch.cat(ood_samples)
                 # add some gaussian noise
                 # ood_samples = self.noise(ood_samples)
                 # energy_score_for_fg = 1 * torch.logsumexp(predictions[0][selected_fg_samples][:, :-1] / 1, 1)
@@ -298,16 +295,13 @@ def train(epoch):
             target_numpy = target.cpu().data.numpy()
             for index in range(len(target)):
                 dict_key = target_numpy[index]
-                if number_dict[dict_key] < args.sample_number:
-                    data_dict[dict_key][number_dict[dict_key]] = output[index].detach()
-                    number_dict[dict_key] += 1
-
+                if len(data_samples[dict_key]) < args.vos_sample_number:
+                    data_samples[dict_key].append(output[index].detach().view(1, -1))
         # backward
-
         optimizer.zero_grad()
         loss = F.cross_entropy(x, target)
         # breakpoint()
-        loss += args.loss_weight * lr_reg_loss
+        loss += args.vos_loss_weight * lr_reg_loss
         loss += nll_loss * 1e-4
 
         if args.smin_loss_weight > 0:
@@ -374,9 +368,9 @@ if not os.path.isdir(args.save):
     raise Exception('%s is not a dir' % args.save)
 
 fn = args.dataset + '_' + args.model + \
-     '_' + str(args.loss_weight) + \
-     '_' + str(args.sample_number) + '_' + str(args.start_epoch) + '_' + \
-     str(args.select) + '_' + str(args.sample_from)
+     '_' + str(args.vos_loss_weight) + \
+     '_' + str(args.vos_sample_number) + '_' + str(args.vos_start_epoch) + '_' + \
+     str(args.vos_select) + '_' + str(args.vos_sample_from)
 if args.smin_loss_weight > 0:
     fn += f'_smin{args.smin_loss_weight}_cond{args.use_conditioning}'
 if args.use_ffs:
@@ -397,9 +391,9 @@ for epoch in range(start_epoch, args.epochs):
     train(epoch)
     test()
     model_name = args.dataset + '_' + args.model + \
-                 '_baseline' + '_' + str(args.loss_weight) + \
-                 '_' + str(args.sample_number) + '_' + str(args.start_epoch) + '_' + \
-                 str(args.select) + '_' + str(args.sample_from)
+                 '_baseline' + '_' + str(args.vos_loss_weight) + \
+                 '_' + str(args.vos_sample_number) + '_' + str(args.vos_start_epoch) + '_' + \
+                 str(args.vos_select) + '_' + str(args.vos_sample_from)
     if args.smin_loss_weight > 0:
         model_name += f'_smin{args.smin_loss_weight}_cond{args.use_conditioning}'
     if args.use_ffs:
