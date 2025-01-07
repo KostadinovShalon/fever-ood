@@ -19,8 +19,10 @@ im100_classes = [
     'n07745940']
 
 os.makedirs('train', exist_ok=True)
+os.makedirs('val', exist_ok=True)
 for i in im100_classes:
     if args.imagenet_dir[-1] == '/':
         args.imagenet_dir = args.imagenet_dir[:-1]
-    os.system(f'ln -s {args.imagenet_dir}/{i} train/{i}')
+    os.system(f'ln -s {args.imagenet_dir}/train/{i} train/{i}')
+    os.system(f'ln -s {args.imagenet_dir}/val/{i} val/{i}')
     print(f'Linked {i}')

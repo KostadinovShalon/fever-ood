@@ -22,7 +22,7 @@ parser = argparse.ArgumentParser(description='Trains a Classifier with VOS/FFS f
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('--dataset', type=str, choices=['cifar10', 'cifar100', 'imagenet-1k', 'imagenet-100'],
                     help='Choose between CIFAR-10, CIFAR-100, Imagenet-100, Imagenet-1k.')
-parser.add_argument('--data-root', type=str, default='./data')
+parser.add_argument('--data-root', type=str, default='./data', help='Root for the dataset.')
 parser.add_argument('--model', '-m', type=str, default='wrn',
                     choices=['wrn', 'rn34', 'rn50'], help='Choose architecture.')
 parser.add_argument('--seed', type=int, default=42, help='Random seed.')
@@ -30,14 +30,14 @@ parser.add_argument('--seed', type=int, default=42, help='Random seed.')
 parser.add_argument('--epochs', '-e', type=int, default=100, help='Number of epochs to train.')
 parser.add_argument('--learning_rate', '-lr', type=float, default=0.1, help='The initial learning rate.')
 parser.add_argument('--batch_size', '-b', type=int, default=128, help='Batch size.')
-parser.add_argument('--test_bs', type=int, default=200)
+parser.add_argument('--test_bs', type=int, default=200, help='Test batch size.')
 parser.add_argument('--momentum', type=float, default=0.9, help='Momentum.')
 parser.add_argument('--decay', '-d', type=float, default=0.0005, help='Weight decay (L2 penalty).')
 
 # WRN Architecture
-parser.add_argument('--wrn-layers', default=40, type=int, help='total number of layers')
-parser.add_argument('--wrn-widen-factor', default=2, type=int, help='widen factor')
-parser.add_argument('--wrn-droprate', default=0.3, type=float, help='dropout probability')
+parser.add_argument('--wrn-layers', default=40, type=int, help='total number of layers for Wide ResNet')
+parser.add_argument('--wrn-widen-factor', default=2, type=int, help='widen factor for Wide ResNet')
+parser.add_argument('--wrn-droprate', default=0.3, type=float, help='dropout probability for Wide ResNet')
 
 # Checkpoints
 parser.add_argument('--save', '-s', type=str, default='./snapshots/baseline', help='Folder to save checkpoints.')
@@ -48,17 +48,17 @@ parser.add_argument('--ngpu', type=int, default=1, help='0 = CPU.')
 parser.add_argument('--prefetch', type=int, default=4, help='Pre-fetching threads.')
 
 # VOS/FFS params
-parser.add_argument('--vos-start-epoch', type=int, default=40)
-parser.add_argument('--vos-sample-number', type=int, default=1000)
-parser.add_argument('--vos-select', type=int, default=1)
-parser.add_argument('--vos-sample-from', type=int, default=10000)
-parser.add_argument('--vos-loss-weight', type=float, default=0.1)
-parser.add_argument('--use_ffs', action='store_true')
+parser.add_argument('--vos-start-epoch', type=int, default=40, help='Epoch to start VOS/FFS.')
+parser.add_argument('--vos-sample-number', type=int, default=1000, help='Number of samples to keep per class.')
+parser.add_argument('--vos-select', type=int, default=1, help='Number of least-likely samples to select from OOD samples.')
+parser.add_argument('--vos-sample-from', type=int, default=10000, help='Number of samplings to construct OOD samples.')
+parser.add_argument('--vos-loss-weight', type=float, default=0.1, help='Weight for VOS loss.')
+parser.add_argument('--use_ffs', action='store_true', help='Use FFS instead of VOS.')
 
 # Fever-OOD params
-parser.add_argument('--smin_loss_weight', type=float, default=0.0)
-parser.add_argument('--use_conditioning', action='store_true')
-parser.add_argument('--null-space-red-dim', type=int, default=-1)
+parser.add_argument('--smin_loss_weight', type=float, default=0.0, help='Weight for least singular value/conditioning number loss.')
+parser.add_argument('--use_conditioning', action='store_true', help='Use conditioning number instead of least singular value.')
+parser.add_argument('--null-space-red-dim', type=int, default=-1, help='Dimensionality reduction for null space.')
 
 args = parser.parse_args()
 state = {k: v for k, v in args._get_kwargs()}

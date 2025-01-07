@@ -42,17 +42,17 @@ parser.add_argument('--ngpu', type=int, default=1, help='0 = CPU.')
 parser.add_argument('--prefetch', type=int, default=4, help='Pre-fetching threads.')
 
 # Dream-OOD specific
-parser.add_argument('--add_class', type=int, default=0)
-parser.add_argument('--energy_weight', type=float, default=2.5)
+parser.add_argument('--add_class', type=int, default=0, help='Add class to CIFAR-100')
+parser.add_argument('--energy_weight', type=float, default=2.5, help='Energy regularization weight')
 parser.add_argument('--seed', type=int, default=0, help='seed')
 
 # FEVER-OOD specific
-parser.add_argument('--smin-loss-weight', type=float, default=0.0)
-parser.add_argument('--use-conditioning', action='store_true')
-parser.add_argument('--null-space-red-dim', type=int, default=-1)
+parser.add_argument('--smin_loss_weight', type=float, default=0.0, help='Weight for least singular value/conditioning number loss.')
+parser.add_argument('--use_conditioning', action='store_true', help='Use conditioning number instead of least singular value.')
+parser.add_argument('--null-space-red-dim', type=int, default=-1, help='Dimensionality reduction for null space.')
 
-parser.add_argument('--id-root', type=str, default='./data/cifarpy')
-parser.add_argument('--ood-root', type=str, default='./data/dream-ood-cifar-outliers')
+parser.add_argument('--id-root', type=str, default='./data/cifarpy', help='Path to CIFAR-100 in-distribution training data')
+parser.add_argument('--ood-root', type=str, default='./data/dream-ood-cifar-outliers', help='Path to OOD data')
 
 args = parser.parse_args()
 
