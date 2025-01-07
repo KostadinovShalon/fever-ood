@@ -10,13 +10,14 @@ import torch.nn.functional as F
 from .virtual_parallel_apply import virtual_parallel_apply
 
 
-def get_cifar_transforms():
+def get_cifar_transforms(synthetic_ood_data_root=None):
     mean = [x / 255 for x in [125.3, 123.0, 113.9]]
     std = [x / 255 for x in [63.0, 62.1, 66.7]]
     train_transform = trn.Compose([trn.RandomHorizontalFlip(), trn.RandomCrop(32, padding=4),
                                    trn.ToTensor(), trn.Normalize(mean, std)])
     test_transform = trn.Compose([trn.ToTensor(), trn.Normalize(mean, std)])
-    return train_transform, test_transform
+    if synthetic_ood_data_root is None:
+        return train_transform, test_transform
 
 
 def get_in_transforms():
@@ -107,3 +108,15 @@ class VirtualDataParallel(torch.nn.DataParallel):
         return virtual_parallel_apply(
             replicas, inputs, kwargs, self.device_ids[: len(replicas)]
         )
+
+
+def get_fever_ood_loss(model, null_space_red_dim, use_conditioning):
+        fcw = model.fc.weight if null_space_red_dim <= 0 else model.fc[2].weight
+        smin = torch.linalg.svdvals(fcw)[-1]
+        if use_conditioning:
+            smax = torch.linalg.svdvals(fcw)[0]
+            smin_loss = smax / smin
+        else:
+            smin_loss = 1 / smin
+
+        return smin_loss

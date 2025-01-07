@@ -10,29 +10,28 @@ import torch.nn.functional as F
 import torchvision.datasets as dset
 import torchvision.transforms as trn
 
-from classification.models.resnet import ResNetModel
+from models.resnet import ResNetModel
 
+from utils import training as utils_training
 
-parser = argparse.ArgumentParser(description='Tunes a CIFAR Classifier with OE',
+parser = argparse.ArgumentParser(description='Trains a Classifier with OOD Detection using Dream-OOD and FEVER-OOD',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-parser.add_argument('--dataset', type=str, default='cifar100',
-                    help='Choose between CIFAR-10, CIFAR-100.')
-parser.add_argument('--model', '-m', type=str, default='wrn',
-                    choices=['allconv', 'wrn', 'densenet'], help='Choose architecture.')
-parser.add_argument('--calibration', '-c', action='store_true',
-                    help='Train a model to be used for calibration. This holds out some data for validation.')
+parser.add_argument('--dataset', type=str, choices=['cifar100', 'imagenet-100'],
+                    help='Choose CIFAR-100 and Imagenet-100')
+parser.add_argument('--model', '-m', type=str, default='r50',
+                    choices=['r34', 'r50'], help='Choose architecture.')
 # Optimization options
 parser.add_argument('--epochs', '-e', type=int, default=100, help='Number of epochs to train.')
 parser.add_argument('--learning_rate', '-lr', type=float, default=0.1, help='The initial learning rate.')
 parser.add_argument('--batch_size', '-b', type=int, default=160, help='Batch size.')
-parser.add_argument('--oe_batch_size', type=int, default=160, help='Batch size.')
+parser.add_argument('--ood_batch_size', type=int, default=160, help='Batch size.')
 parser.add_argument('--test_bs', type=int, default=200)
 parser.add_argument('--momentum', type=float, default=0.9, help='Momentum.')
 parser.add_argument('--decay', '-d', type=float, default=0.0005, help='Weight decay (L2 penalty).')
 # WRN Architecture
-parser.add_argument('--layers', default=40, type=int, help='total number of layers')
-parser.add_argument('--widen-factor', default=2, type=int, help='widen factor')
-parser.add_argument('--droprate', default=0.3, type=float, help='dropout probability')
+parser.add_argument('--wrn-layers', default=40, type=int, help='total number of layers')
+parser.add_argument('--wrn-widen-factor', default=2, type=int, help='widen factor')
+parser.add_argument('--wrn-droprate', default=0.3, type=float, help='dropout probability')
 # Checkpoints
 parser.add_argument('--save', '-s', type=str, default='./snapshots/', help='Folder to save checkpoints.')
 parser.add_argument('--load', '-l', type=str, default='',
@@ -41,86 +40,115 @@ parser.add_argument('--test', '-t', action='store_true', help='Test only flag.')
 # Acceleration
 parser.add_argument('--ngpu', type=int, default=1, help='0 = CPU.')
 parser.add_argument('--prefetch', type=int, default=4, help='Pre-fetching threads.')
-# EG specific
-parser.add_argument('--m_in', type=float, default=-25.,
-                    help='margin for in-distribution; above this value will be penalized')
-parser.add_argument('--m_out', type=float, default=-7.,
-                    help='margin for out-distribution; below this value will be penalized')
-parser.add_argument('--score', type=str, default='energy', help='OE|energy')
-parser.add_argument('--add_slope', type=int, default=0)
-parser.add_argument('--add_class', type=int, default=0)
-parser.add_argument('--my_info', type=str, default='')
-parser.add_argument('--vanilla', type=int, default=0)
-parser.add_argument('--godin', type=int, default=0)
-parser.add_argument('--gan', type=int, default=0)
-parser.add_argument('--oe', type=int, default=0)
-parser.add_argument('--r50', type=int, default=0)
-parser.add_argument('--vos', type=int, default=0)
-parser.add_argument('--gpu', type=int, default=0)
-parser.add_argument('--additional_info', type=str, default='')
-parser.add_argument('--energy_weight', type=float, default=2.5)
-parser.add_argument('--seed', type=int, default=1, help='seed for np(tinyimages80M sampling); 1|2|8|100|107')
 
-parser.add_argument('--smin_loss_weight', type=float, default=0.0)
-parser.add_argument('--use_conditioning', action='store_true')
-parser.add_argument('--null_space_red_dim', type=int, default=-1)
+# Dream-OOD specific
+parser.add_argument('--add_class', type=int, default=0)
+parser.add_argument('--energy_weight', type=float, default=2.5)
+parser.add_argument('--seed', type=int, default=0, help='seed')
+
+# FEVER-OOD specific
+parser.add_argument('--smin-loss-weight', type=float, default=0.0)
+parser.add_argument('--use-conditioning', action='store_true')
+parser.add_argument('--null-space-red-dim', type=int, default=-1)
 
 parser.add_argument('--id-root', type=str, default='./data/cifarpy')
 parser.add_argument('--ood-root', type=str, default='./data/dream-ood-cifar-outliers')
 
 args = parser.parse_args()
 
-if args.score == 'OE':
-    save_info = 'energy_ft_sd'
-elif args.score == 'energy':
-    save_info = 'energy_ft_sd'
-
-args.save = args.save + save_info
+args.save = args.save + 'dream_ood'
 if os.path.isdir(args.save) == False:
     os.mkdir(args.save)
 state = {k: v for k, v in args._get_kwargs()}
 print(state)
 
-torch.manual_seed(2)
-np.random.seed(2)
+torch.manual_seed(args.seed)
+np.random.seed(args.seed)
 
 # mean and standard deviation of channels of CIFAR-10 images
 mean = [x / 255 for x in [125.3, 123.0, 113.9]]
 std = [x / 255 for x in [63.0, 62.1, 66.7]]
 
-train_transform = trn.Compose([trn.RandomHorizontalFlip(), trn.RandomCrop(32, padding=4),
-                               trn.ToTensor(), trn.Normalize(mean, std)])
-test_transform = trn.Compose([trn.ToTensor(), trn.Normalize(mean, std)])
+if args.dataset == 'cifar100':
+    train_transform, test_transform = utils_training.get_cifar_transforms()
+    train_data_in = dset.CIFAR100(args.id_root, train=True, transform=train_transform)
+    test_data = dset.CIFAR100(args.id_root, train=False, transform=test_transform)
 
+    ood_data = dset.ImageFolder(root=args.ood_root,
+                                transform=trn.Compose([trn.ToTensor(), trn.ToPILImage(),
+                                                       trn.RandomCrop(32, padding=4),
+                                                       trn.RandomHorizontalFlip(), trn.ToTensor(),
+                                                       trn.Normalize(mean, std)]))
+else:
+    traindir = os.path.join(args.id_root, 'train')
+    valdir = os.path.join(args.id_root, 'val')
+    normalize = trn.Normalize(mean=[0.485, 0.456, 0.406],
+                              std=[0.229, 0.224, 0.225])
+    if args.augmix:
+        train_data_in = dset.ImageFolder(
+            traindir,
+            trn.Compose([
+                trn.AugMix(),
+                trn.RandomResizedCrop(224),
+                trn.RandomHorizontalFlip(),
+                trn.ToTensor(),
+                normalize,
+            ])
+        )
+    else:
+        train_data_in = dset.ImageFolder(
+            traindir,
+            trn.Compose([
+                trn.RandomResizedCrop(224),
+                trn.RandomHorizontalFlip(),
+                trn.ToTensor(),
+                normalize,
+            ]))
+    if args.deepaugment:
+        edsr_dataset = dset.ImageFolder(
+            '/nobackup-fast/dataset/my_xfdu/deepaugment/imagenet-r/DeepAugment/EDSR/',
+            trn.Compose([
+                trn.RandomResizedCrop(224),
+                trn.RandomHorizontalFlip(),
+                trn.ToTensor(),
+                normalize,
+            ]))
 
-train_data_in = dset.CIFAR100(args.id_root, train=True, transform=train_transform)
-test_data = dset.CIFAR100(args.id_root, train=False, transform=test_transform)
-
+        cae_dataset = dset.ImageFolder(
+            '/nobackup-fast/dataset/my_xfdu/deepaugment/imagenet-r/DeepAugment/CAE/',
+            trn.Compose([
+                trn.RandomResizedCrop(224),
+                trn.RandomHorizontalFlip(),
+                trn.ToTensor(),
+                normalize,
+            ]))
+        train_data_in = torch.utils.data.ConcatDataset([train_data_in, edsr_dataset, cae_dataset])
+    test_data = dset.ImageFolder(
+        valdir,
+        trn.Compose([
+            trn.Resize(256),
+            trn.CenterCrop(224),
+            trn.ToTensor(),
+            normalize,
+        ]))
+    ood_data = dset.ImageFolder(root=args.ood_root,
+                                transform=trn.Compose([trn.RandomResizedCrop(224),
+                                                       trn.RandomHorizontalFlip(),
+                                                       trn.ToTensor(),
+                                                       normalize, ]))
 if args.add_class:
     num_classes = 101
 else:
     num_classes = 100
-
-calib_indicator = ''
-if args.calibration:
-    train_data_in, val_data = validation_split(train_data_in, val_share=0.1)
-    calib_indicator = '_calib'
-
-ood_data = dset.ImageFolder(root=args.ood_root,
-                            transform=trn.Compose([trn.ToTensor(), trn.ToPILImage(),
-                                                   trn.RandomCrop(32, padding=4),
-                                                   trn.RandomHorizontalFlip(), trn.ToTensor(),
-                                                   trn.Normalize(mean, std)]))
 
 train_loader_in = torch.utils.data.DataLoader(
     train_data_in,
     batch_size=args.batch_size, shuffle=True,
     num_workers=args.prefetch, pin_memory=True)
 
-
 train_loader_out = torch.utils.data.DataLoader(
     ood_data,
-    batch_size=args.oe_batch_size, shuffle=True,
+    batch_size=args.ood_batch_size, shuffle=True,
     num_workers=args.prefetch, pin_memory=True)
 
 test_loader = torch.utils.data.DataLoader(
@@ -129,12 +157,13 @@ test_loader = torch.utils.data.DataLoader(
     num_workers=args.prefetch, pin_memory=True)
 
 # Create model
-if args.r50:
+if args.model == 'r50':
     net = ResNetModel(name='resnet50', num_classes=num_classes, null_space_red_dim=args.null_space_red_dim)
 else:
     net = ResNetModel(name='resnet34', num_classes=num_classes, null_space_red_dim=args.null_space_red_dim)
 for p in net.parameters():
     p.register_hook(lambda grad: torch.clamp(grad, -35, 35))
+
 
 def recursion_change_bn(module):
     if isinstance(module, torch.nn.BatchNorm2d):
@@ -145,27 +174,22 @@ def recursion_change_bn(module):
             module1 = recursion_change_bn(module1)
     return module
 
+
 if args.null_space_red_dim > 0:
     args.model = f'{args.model}_nsr{args.null_space_red_dim}'
 
 # Restore model
-model_found = False
+start_epoch = 0
+# Restore model if desired
 if args.load != '':
-    for i in range(1000 - 1, -1, -1):
-        model_name = os.path.join(args.load, args.dataset + calib_indicator + '_' + args.model +
-                                  '_pretrained_epoch_' + str(i) + '.pt')
-        if args.add_class:
-            args.load = './snapshots/baseline'
-            model_name = os.path.join(args.load, args.dataset + calib_indicator + '_' + args.model +
-                                      '_baseline_epoch_' + str(i) + '.pt')
-
-        if os.path.isfile(model_name):
-            net.load_state_dict(torch.load(model_name))
-            print('Model restored! Epoch:', i)
-            model_found = True
-            break
-    if not model_found:
-        assert False, "could not find model to restore"
+    model_name = args.load.split('/')[-1]
+    if 'epoch_' in model_name:
+        start_epoch = int(model_name.split('_')[-1].split('.')[0])
+    else:
+        print('No epoch number found in model name. Using epoch=0.')
+    if os.path.isfile(model_name):
+        net.load_state_dict(torch.load(str(model_name)))
+        print('Model restored! Epoch:', start_epoch)
 
 if args.ngpu > 1:
     net = torch.nn.DataParallel(net, device_ids=list(range(args.ngpu)))
@@ -203,7 +227,8 @@ scheduler = torch.optim.lr_scheduler.LambdaLR(
 # /////////////// Training ///////////////
 criterion = torch.nn.CrossEntropyLoss()
 
-def train(epoch):
+
+def train():
     net.train()  # enter train mode
     loss_avg = 0.0
     loss_energy_avg = 0.0
@@ -230,34 +255,19 @@ def train(epoch):
             loss = F.cross_entropy(x, target)
         else:
             loss = F.cross_entropy(x[:len(in_set[0])], target)
-            if args.score == 'energy':
+        Ec_out = torch.logsumexp(x[len(in_set[0]):], dim=1)
+        Ec_in = torch.logsumexp(x[:len(in_set[0])], dim=1)
+        binary_labels = torch.ones(len(x)).cuda()
+        binary_labels[len(in_set[0]):] = 0
 
-                Ec_out = torch.logsumexp(x[len(in_set[0]):], dim=1)
-                Ec_in = torch.logsumexp(x[:len(in_set[0])], dim=1)
-                binary_labels = torch.ones(len(x)).cuda()
-                binary_labels[len(in_set[0]):] = 0
+        input_for_lr = torch.cat((Ec_in, Ec_out), -1)
+        output1 = logistic_regression(input_for_lr.reshape(-1, 1))
+        energy_reg_loss = criterion(output1, binary_labels.long())
+        loss += args.energy_weight * energy_reg_loss
 
-                input_for_lr = torch.cat((Ec_in, Ec_out), -1)
-                criterion = torch.nn.CrossEntropyLoss()
-                output1 = logistic_regression(input_for_lr.reshape(-1, 1))
-                energy_reg_loss = criterion(output1, binary_labels.long())
-                loss += args.energy_weight * energy_reg_loss
-
-            elif args.score == 'OE':
-                loss += args.energy_weight * -(x[len(in_set[0]):].mean(1) - torch.logsumexp(x[len(in_set[0]):], dim=1)).mean()
-
-        if args.smin_loss_weight > 0:
-            fcw = net.fc.weight if args.null_space_red_dim <= 0 else net.fc[2].weight
-            smin = torch.linalg.svdvals(fcw)[-1]
-            if args.use_conditioning:
-                smax = torch.linalg.svdvals(fcw)[0]
-                smin_loss = args.smin_loss_weight * (smax / smin)
-            else:
-                smin_loss = args.smin_loss_weight * (1 / smin)
-
-            loss += smin_loss
-        else:
-            smin_loss = 0
+        # FEVER-OOD
+        smin_loss = utils_training.get_fever_ood_loss(net, args.null_space_red_dim, args.use_conditioning)
+        loss += args.smin_loss_weight * smin_loss
 
         loss.backward()
         optimizer.step()
@@ -309,34 +319,32 @@ if not os.path.exists(args.save):
 if not os.path.isdir(args.save):
     raise Exception('%s is not a dir' % args.save)
 
-save_info = save_info + "_slope_" + str(args.add_slope) + '_' + "weight_" + str(args.energy_weight)
-save_info = save_info + '_' + args.my_info + '_' + args.additional_info
+log_file = os.path.join(args.save,
+                        args.dataset + '_' + args.model + '_s' + str(args.seed) +
+                        '_' + "weight_" + str(args.energy_weight) + '_training_results.csv')
+model_name = args.dataset + '_' + args.model + '_baseline' + '_' + "weight_" + str(args.energy_weight)
+if args.smin_loss_weight > 0:
+    model_name += f'_smin{args.smin_loss_weight}_cond{args.use_conditioning}'
 
-with open(os.path.join(args.save, args.dataset + calib_indicator + '_' + args.model + '_s' + str(args.seed) +
-                                  '_' + save_info + '_training_results.csv'), 'w') as f:
+with open(log_file, 'w') as f:
     f.write('epoch,time(s),train_loss,test_loss,test_error(%)\n')
 
 print('Beginning Training\n')
 
 # Main loop
-for epoch in range(0, args.epochs):
+for epoch in range(start_epoch, args.epochs):
     state['epoch'] = epoch
 
     begin_epoch = time.time()
-    train(epoch)
+    train()
     test()
 
-    model_name = args.dataset + calib_indicator + '_' + args.model + \
-                 '_baseline' + '_' + save_info
-    if args.smin_loss_weight > 0:
-        model_name += f'_smin{args.smin_loss_weight}_cond{args.use_conditioning}'
-    model_name += '_epoch_'
-    prev_path = model_name + str(epoch - 1) + '.pt'
-    model_name = model_name + str(epoch) + '.pt'
-
+    epoch_model_name = model_name + '_epoch_'
+    prev_path = epoch_model_name + str(epoch - 1) + '.pt'
+    epoch_model_name = epoch_model_name + str(epoch) + '.pt'
 
     # Save model
-    torch.save(net.state_dict(), os.path.join(args.save, model_name))
+    torch.save(net.state_dict(), os.path.join(args.save, epoch_model_name))
 
     # Let us not waste space and delete the previous model
     prev_path = os.path.join(args.save, prev_path)
@@ -344,9 +352,7 @@ for epoch in range(0, args.epochs):
         os.remove(prev_path)
 
     # Show results
-    with open(os.path.join(args.save, args.dataset + calib_indicator + '_' + args.model + '_s' + str(args.seed) +
-                                      '_' + save_info + f'_smin{args.smin_loss_weight}_cond{args.use_conditioning}' +
-                                      '_training_results.csv'), 'a') as f:
+    with open(log_file, 'a') as f:
         f.write('%03d,%05d,%0.6f,%0.6f,%0.6f,%0.5f,%0.2f\n' % (
             (epoch + 1),
             time.time() - begin_epoch,
@@ -357,12 +363,13 @@ for epoch in range(0, args.epochs):
             100 - 100. * state['test_accuracy'],
         ))
 
-    print('Epoch {0:3d} | Time {1:5d} | Train Loss {2:.4f} | Train Smin Loss {3:.4f} | Train Energy Loss {4:.4f} | Test Loss {5:.3f} | Test Error {6:.2f}'.format(
-        (epoch + 1),
-        int(time.time() - begin_epoch),
-        state['train_loss'],
-        state['train_smin_loss'],
-        state['train_energy_loss'],
-        state['test_loss'],
-        100 - 100. * state['test_accuracy'])
+    print(
+        'Epoch {0:3d} | Time {1:5d} | Train Loss {2:.4f} | Train Smin Loss {3:.4f} | Train Energy Loss {4:.4f} | Test Loss {5:.3f} | Test Error {6:.2f}'.format(
+            (epoch + 1),
+            int(time.time() - begin_epoch),
+            state['train_loss'],
+            state['train_smin_loss'],
+            state['train_energy_loss'],
+            state['test_loss'],
+            100 - 100. * state['test_accuracy'])
     )
