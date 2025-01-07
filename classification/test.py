@@ -47,7 +47,7 @@ args = parser.parse_args()
 print(args)
 
 cifar_test_transform = utils_testing.get_cifar_test_transforms()
-in_test_transform = utils_testing.get_in_test_transforms()
+in_test_transform = utils_testing.get_in_test_transforms(args.dataset)
 
 if args.dataset == 'cifar10':
     test_data = dset.CIFAR10(f'{args.data_root}/cifarpy', train=False, transform=cifar_test_transform)
@@ -121,16 +121,22 @@ elif args.score == 'M':
     _, right_score, wrong_score = utils_testing.get_ood_scores(net, test_loader, ood_num_examples, args.test_bs,
                                                                score='M', use_xent=args.use_xent, in_dist=True)
 
-    if 'cifar10_' in args.method_name:
+    if 'cifar10' in args.dataset:
         train_data = dset.CIFAR10(f'{args.data_root}/cifarpy', train=True, transform=cifar_test_transform)
-    else:
+    elif 'cifar100' in args.dataset:
         train_data = dset.CIFAR100(f'{args.data_root}/cifarpy', train=True, transform=in_test_transform)
+    elif 'imagenet-1k' in args.dataset:
+        train_data = dset.ImageFolder(f'{args.data_root}/imagenet-1k/train', transform=in_test_transform)
+    else:
+        train_data = dset.ImageFolder(f'{args.data_root}/imagenet-100/train', transform=in_test_transform)
 
     train_loader = torch.utils.data.DataLoader(train_data, batch_size=args.test_bs, shuffle=False,
                                                num_workers=args.prefetch, pin_memory=True)
     num_batches = ood_num_examples // args.test_bs
-
-    temp_x = torch.rand(2, 3, 32, 32)
+    if 'cifar' in args.dataset:
+        temp_x = torch.rand(2, 3, 32, 32)
+    else:
+        temp_x = torch.rand(2, 3, 224, 224)
     temp_x = Variable(temp_x)
     temp_x = temp_x.cuda()
     temp_list = net.feature_list(temp_x)[1]
@@ -168,38 +174,72 @@ show_performance(wrong_score, right_score, method_name=args.ood_method)
 
 # /////////////// OOD Detection ///////////////
 results_kwargs['in_score'] = in_score
-
 res_list = []
-# /////////////// Textures ///////////////
-results_kwargs['ood_loader'] = utils_testing.get_textures_dataloader(args.data_root, args.test_bs)
-print('\n\nTexture Detection')
-res = utils_testing.get_and_print_results(**results_kwargs)
-res_list.append(res)
 
-# /////////////// SVHN /////////////// # cropped and no sampling of the test set
-results_kwargs['ood_loader'] = utils_testing.get_svhn_dataloader(args.data_root, args.test_bs)
-print('\n\nSVHN Detection')
-res = utils_testing.get_and_print_results(**results_kwargs)
-res_list.append(res)
-# /////////////// Places365 ///////////////
-results_kwargs['ood_loader'] = utils_testing.get_places365_dataloader(args.data_root, args.test_bs)
-print('\n\nPlaces365 Detection')
-res = utils_testing.get_and_print_results(**results_kwargs)
-res_list.append(res)
-# /////////////// LSUN-C ///////////////
-results_kwargs['ood_loader'] = utils_testing.get_lsun_c_dataloader(args.data_root, args.test_bs)
-print('\n\nLSUN_C Detection')
-res = utils_testing.get_and_print_results(**results_kwargs)
-res_list.append(res)
-# /////////////// iSUN ///////////////
-results_kwargs['ood_loader'] = utils_testing.get_isun_dataloader(args.data_root, args.test_bs)
-print('\n\niSUN Detection')
-res = utils_testing.get_and_print_results(**results_kwargs)
-res_list.append(res)
+if 'cifar' in args.dataset:
+
+    # /////////////// Textures ///////////////
+    results_kwargs['ood_loader'] = utils_testing.get_textures_dataloader(args.data_root, args.test_bs)
+    print('\n\nTexture Detection')
+    res = utils_testing.get_and_print_results(**results_kwargs)
+    res_list.append(res)
+
+    # /////////////// SVHN /////////////// # cropped and no sampling of the test set
+    results_kwargs['ood_loader'] = utils_testing.get_svhn_dataloader(args.data_root, args.test_bs)
+    print('\n\nSVHN Detection')
+    res = utils_testing.get_and_print_results(**results_kwargs)
+    res_list.append(res)
+    # /////////////// Places365 ///////////////
+    results_kwargs['ood_loader'] = utils_testing.get_places365_dataloader(args.data_root, args.test_bs)
+    print('\n\nPlaces365 Detection')
+    res = utils_testing.get_and_print_results(**results_kwargs)
+    res_list.append(res)
+    # /////////////// LSUN-C ///////////////
+    results_kwargs['ood_loader'] = utils_testing.get_lsun_c_dataloader(args.data_root, args.test_bs)
+    print('\n\nLSUN_C Detection')
+    res = utils_testing.get_and_print_results(**results_kwargs)
+    res_list.append(res)
+    # /////////////// iSUN ///////////////
+    results_kwargs['ood_loader'] = utils_testing.get_isun_dataloader(args.data_root, args.test_bs)
+    print('\n\niSUN Detection')
+    res = utils_testing.get_and_print_results(**results_kwargs)
+    res_list.append(res)
+    # /////////////// Mean Results ///////////////
+
+
+else:
+    # /////////////// inat ///////////////
+    results_kwargs['ood_loader'] = utils_testing.get_inat_dataloader(args.data_root, args.test_bs, resize=256,
+                                                                     center_crop=224)
+    print('\n\ninat Detection')
+    res = utils_testing.get_and_print_results(**results_kwargs)
+    res_list.append(res)
+
+    # /////////////// Places365 ///////////////
+    results_kwargs['ood_loader'] = utils_testing.get_places365_dataloader(args.data_root, args.test_bs,
+                                                                          resize=256,
+                                                                          center_crop=224,
+                                                                          partition='Places')
+    print('\n\nPlaces365 Detection')
+    res = utils_testing.get_and_print_results(**results_kwargs)
+    res_list.append(res)
+
+    # /////////////// sun ///////////////
+    results_kwargs['ood_loader'] = utils_testing.get_sun_dataloader(args.data_root, args.test_bs)
+    print('\n\nSUN Detection')
+    res = utils_testing.get_and_print_results(**results_kwargs)
+    res_list.append(res)
+
+    # /////////////// texture ///////////////
+    results_kwargs['ood_loader'] = utils_testing.get_textures_dataloader(args.data_root, args.test_bs,
+                                                                          resize=256,
+                                                                          center_crop=224)
+    print('\n\nTexture Detection')
+    res = utils_testing.get_and_print_results(**results_kwargs)
+    res_list.append(res)
+
 # /////////////// Mean Results ///////////////
-
 # res_list --> List of tuples to tuple of lists
 auroc_list, aupr_list, fpr_list = zip(*res_list)
-
 print('\n\nMean Test Results!!!!!')
-print_measures(np.mean(auroc_list), np.mean(aupr_list), np.mean(fpr_list), method_name='vos/ffs')
+print_measures(np.mean(auroc_list), np.mean(aupr_list), np.mean(fpr_list), method_name=args.ood_method)

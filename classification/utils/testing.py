@@ -25,13 +25,22 @@ def get_cifar_test_transforms():
     return test_transform
 
 
-def get_in_test_transforms():
-    return trn.Compose([
-        trn.Resize(size=(224, 224), interpolation=trn.InterpolationMode.BICUBIC),
-        trn.CenterCrop(size=(224, 224)),
-        trn.ToTensor(),
-        trn.Normalize(mean=(0.48145466, 0.4578275, 0.40821073), std=(0.26862954, 0.26130258, 0.27577711))
-    ])
+def get_in_test_transforms(dataset):
+    if 'cifar' in dataset:
+        return trn.Compose([
+            trn.Resize(size=(224, 224), interpolation=trn.InterpolationMode.BICUBIC),
+            trn.CenterCrop(size=(224, 224)),
+            trn.ToTensor(),
+            trn.Normalize(mean=(0.48145466, 0.4578275, 0.40821073), std=(0.26862954, 0.26130258, 0.27577711))
+        ])
+    elif 'imagenet' in dataset:
+        return trn.Compose([
+            trn.Resize(size=256, interpolation=trn.InterpolationMode.BICUBIC),
+            trn.CenterCrop(size=224),
+            trn.ToTensor(),
+            trn.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
+        ])
+    return trn.Compose([trn.ToTensor(), trn.Normalize(mean, std)])
 
 
 def get_ood_scores(model, loader, ood_num_examples, test_bs, score='energy', temp=1., use_xent=False, in_dist=False):
@@ -125,9 +134,9 @@ def get_and_print_results(in_score,
     return auroc, aupr, fpr
 
 
-def get_textures_dataloader(root, test_bs):
+def get_textures_dataloader(root, test_bs, resize=32, center_crop=32):
     ood_data = dset.ImageFolder(root=f"{root}/dtd/images",
-                                transform=trn.Compose([trn.Resize(32), trn.CenterCrop(32),
+                                transform=trn.Compose([trn.Resize(resize), trn.CenterCrop(center_crop),
                                                        trn.ToTensor(), trn.Normalize(mean, std)]))
     ood_loader = torch.utils.data.DataLoader(ood_data, batch_size=test_bs, shuffle=True,
                                              num_workers=4, pin_memory=True)
@@ -144,9 +153,9 @@ def get_svhn_dataloader(root, test_bs):
     return ood_loader
 
 
-def get_places365_dataloader(root, test_bs):
-    ood_data = dset.ImageFolder(root=f"{root}/places365/",
-                                transform=trn.Compose([trn.Resize(32), trn.CenterCrop(32),
+def get_places365_dataloader(root, test_bs, resize=32, center_crop=32, partition='places365'):
+    ood_data = dset.ImageFolder(root=f"{root}/{partition}/",
+                                transform=trn.Compose([trn.Resize(resize), trn.CenterCrop(center_crop),
                                                        trn.ToTensor(), trn.Normalize(mean, std)]))
     ood_loader = torch.utils.data.DataLoader(ood_data, batch_size=test_bs, shuffle=True,
                                              num_workers=2, pin_memory=True)
@@ -172,6 +181,23 @@ def get_lsun_resize_dataloader(root, test_bs):
 def get_isun_dataloader(root, test_bs):
     ood_data = dset.ImageFolder(root=f"{root}/iSUN",
                                 transform=trn.Compose([trn.ToTensor(), trn.Normalize(mean, std)]))
+    ood_loader = torch.utils.data.DataLoader(ood_data, batch_size=test_bs, shuffle=True,
+                                             num_workers=1, pin_memory=True)
+    return ood_loader
+
+
+def get_inat_dataloader(root, test_bs, resize=32, center_crop=32):
+    ood_data = dset.ImageFolder(root=f"{root}/iNaturalist",
+                                transform=trn.Compose([trn.Resize(resize), trn.CenterCrop(center_crop),
+                                                       trn.ToTensor(), trn.Normalize(mean, std)]))
+    ood_loader = torch.utils.data.DataLoader(ood_data, batch_size=test_bs, shuffle=True,
+                                             num_workers=2, pin_memory=True)
+    return ood_loader
+
+def get_sun_dataloader(root, test_bs, resize=256, center_crop=224):
+    ood_data = dset.ImageFolder(root=f"{root}/SUN",
+                                transform=trn.Compose([trn.Resize(resize), trn.CenterCrop(center_crop),
+                                                       trn.ToTensor(), trn.Normalize(mean, std)]))
     ood_loader = torch.utils.data.DataLoader(ood_data, batch_size=test_bs, shuffle=True,
                                              num_workers=1, pin_memory=True)
     return ood_loader
