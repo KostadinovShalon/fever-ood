@@ -1,3 +1,4 @@
+import matplotlib
 import argparse
 import os
 from scipy.linalg import null_space
@@ -8,19 +9,16 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
-import torch.nn.functional as F
 import torchvision.datasets as dset
 import torchvision.transforms as trn
-from models.densenet import DenseNet3
 from models.wrn import WideResNet
 from utils import svhn_loader as svhn
-
 
 parser = argparse.ArgumentParser(description='Visualize the features of a CIFAR OOD Detector',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 # Setup
 parser.add_argument('--test_bs', type=int, default=200)
-parser.add_argument('--method_name', '-m', type=str, default='cifar10_allconv_baseline', help='Method name.')
+parser.add_argument('--dataset', '-d', type=str, choices=['cifar10', 'cifar100'], default='cifar10')
 # Loading details
 parser.add_argument('--layers', default=40, type=int, help='total number of layers')
 parser.add_argument('--widen-factor', default=2, type=int, help='widen factor')
@@ -31,7 +29,7 @@ parser.add_argument('--prefetch', type=int, default=2, help='Pre-fetching thread
 # EG and benchmark details
 parser.add_argument('--T', default=1., type=float, help='temperature: energy|Odin')
 parser.add_argument('--noise', type=float, default=0, help='noise for Odin')
-parser.add_argument('--model_name', default='res', type=str)
+parser.add_argument('--model_name', default='wrn', type=str)
 parser.add_argument('--root', type=str, default='./data')
 parser.add_argument('--proj_method', type=str, default='umap', choices=['tsne', 'umap'])
 parser.add_argument('--null_space_red_dim', type=int, default=-1)
@@ -44,7 +42,7 @@ std = [x / 255 for x in [63.0, 62.1, 66.7]]
 
 test_transform = trn.Compose([trn.ToTensor(), trn.Normalize(mean, std)])
 
-if 'cifar10_' in args.method_name:
+if 'cifar10' == args.dataset:
     test_data = dset.CIFAR10(f'{args.root}/cifarpy', train=False, transform=test_transform)
     num_classes = 10
 else:
@@ -55,13 +53,11 @@ test_loader = torch.utils.data.DataLoader(test_data, batch_size=args.test_bs, sh
                                           num_workers=args.prefetch, pin_memory=True)
 
 # Create model
-if args.model_name == 'res':
+if args.model_name == 'wrn':
     net = WideResNet(args.layers, num_classes, args.widen_factor, drop_rate=args.drop_rate,
                      null_space_red_dim=args.null_space_red_dim)
 else:
-    net = DenseNet3(100, num_classes, 12, reduction=0.5, bottleneck=True, drop_rate=0.0,
-                    normalizer=None,
-                    k=None, info=None)
+    raise NotImplementedError('Model not yet supported')
 # Restore model
 if os.path.isfile(args.checkpoint):
     net.load_state_dict(torch.load(args.checkpoint))
@@ -84,39 +80,11 @@ cudnn.benchmark = True  # fire on all cylinders
 ood_num_examples = len(test_data) // 15
 expected_ap = ood_num_examples / (ood_num_examples + len(test_data))
 
+
 def concat(x): return np.concatenate(x, axis=0)
+
+
 def to_np(x): return x.data.cpu().numpy()
-
-
-def get_ood_scores(loader, in_dist=False):
-    _score = []
-    _right_score = []
-    _wrong_score = []
-
-    with torch.no_grad():
-        for batch_idx, (data, target) in enumerate(loader):
-            if batch_idx >= ood_num_examples // args.test_bs and in_dist is False:
-                break
-
-            data = data.cuda()
-
-            output = net(data)
-            smax = to_np(F.softmax(output, dim=1))
-            _score.append(-to_np((args.T * torch.logsumexp(output / args.T, dim=1))))
-
-            if in_dist:
-                preds = np.argmax(smax, axis=1)
-                targets = target.numpy().squeeze()
-                right_indices = preds == targets
-                wrong_indices = np.invert(right_indices)
-
-                _right_score.append(-np.max(smax[right_indices], axis=1))
-                _wrong_score.append(-np.max(smax[wrong_indices], axis=1))
-
-    if in_dist:
-        return concat(_score).copy(), concat(_right_score).copy(), concat(_wrong_score).copy()
-    else:
-        return concat(_score)[:ood_num_examples].copy()
 
 
 def get_features(loader, in_dist=False):
@@ -218,8 +186,6 @@ else:
     fc = net.fc
 
 # Create a scatter plot with the first 'n_id' points colored by their class and the rest as black 'x's
-import matplotlib
-
 matplotlib.rcParams.update({'font.size': 16})
 
 plt.figure()
@@ -264,8 +230,6 @@ id_logits_0 = id_logits[cats == 0]
 # n_id_1 = len(id_fts_1)
 # id_logits_1 = id_logits[cats == 1]
 
-id_fts = id_fts_0
-
 Wt = to_np(fc.weight)
 # Get SVD
 U, S, V = np.linalg.svd(Wt)
@@ -288,7 +252,7 @@ cat_0_ft_center = np.mean(id_fts_0, axis=0)
 lsv_features = lsv_features + cat_0_ft_center
 non_changing_features = cat_0_ft_center + non_changing_features
 random_features = cat_0_ft_center + random_features
-all_fts = concat([id_fts, non_changing_features, lsv_features, random_features])
+all_fts = concat([id_fts_0, non_changing_features, lsv_features, random_features])
 proj_results = reducer.fit_transform(all_fts)
 
 non_changing_logits = torch.tensor(non_changing_features, dtype=torch.float32).cuda()
@@ -383,55 +347,5 @@ plt.pcolormesh(xv, yv, energy_grid - energy_grid[0, 0], cmap='inferno', vmin=-50
 plt.colorbar().set_label('Free Energy Change')
 plt.xlabel('Norm of NS Component')
 plt.ylabel('Norm of NSP Component')
-plt.tight_layout()
-plt.show()
-
-#
-# Wt = to_np(fc.weight)
-# # Get SVD
-# U, S, V = np.linalg.svd(Wt)
-# lsv_dirs = V[:len(S)]
-# span = np.linspace(-50, 50, 41)
-# lsv_features = np.array([lsv_dirs * s for s in span])
-#
-# id_fts_0 = id_fts[cats == 0]
-# cat_0_ft_center = np.mean(id_fts_0, axis=0)
-# lsv_features = lsv_features + cat_0_ft_center
-#
-# lsv_logits = torch.tensor(lsv_features, dtype=torch.float32).cuda()
-# lsv_logits = to_np(fc(lsv_logits))
-# energy = get_ft_energy(lsv_logits, dim=2).T
-#
-# for i in range(len(energy)):
-#
-#     plt.plot(span, energy[i], c=f"{i / (2 * len(energy)) + 0.5}", label=f'LSV {i + 1}')
-
-id_energy = energy[:n_id]
-textures_energy = energy[n_id:n_id + n_textures]
-svhn_energy = energy[n_id + n_textures:n_id + n_textures + n_svhn]
-places365_energy = energy[n_id + n_textures + n_svhn:n_id + n_textures + n_svhn + n_places365]
-lsun_energy = energy[n_id + n_textures + n_svhn + n_places365:n_id + n_textures + n_svhn + n_places365 + n_lsun]
-isun_energy = energy[n_id + n_textures + n_svhn + n_places365 + n_lsun:]
-all_ood_energy = energy[n_id:]
-
-from scipy.stats import gaussian_kde
-
-id_density = gaussian_kde(id_energy)
-ood_density = gaussian_kde(all_ood_energy)
-#
-# plt.scatter(results[indices[0]:indices[1], 0], results[indices[0]:indices[1], 1], c='black', marker='x', s=20, label='Textures')
-# plt.scatter(results[indices[1]:indices[2], 0], results[indices[1]:indices[2], 1], c='blue', marker='x', s=20, label='SVHN')
-# plt.scatter(results[indices[2]:indices[3], 0], results[indices[2]:indices[3], 1], c='red', marker='x', s=20, label='Places365')
-# plt.scatter(results[indices[3]:indices[4], 0], results[indices[3]:indices[4], 1], c='green', marker='x', s=20, label='LSUN')
-# plt.scatter(results[indices[4]:, 0], results[indices[4]:, 1], c='magenta', marker='x', s=20, label='iSUN')
-
-x = np.linspace(-35, 0, 1000)
-
-plt.plot(x, id_density(x), label="ID dist")
-plt.plot(x, ood_density(x), label="OOD dist")
-plt.legend()
-plt.title('LSV Energy Change')
-plt.ylabel('Free Energy Score')
-plt.xlabel('Distance to the class center')
 plt.tight_layout()
 plt.show()
