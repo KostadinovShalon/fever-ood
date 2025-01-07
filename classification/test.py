@@ -12,6 +12,8 @@ from models.wrn import WideResNet
 from utils import testing as utils_testing
 from utils.display_results import show_performance, print_measures
 
+from models.resnet import ResNetModel
+
 parser = argparse.ArgumentParser(description='Evaluates a CIFAR OOD Detector',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 # Setup
@@ -25,6 +27,7 @@ parser.add_argument('--dataset', type=str, choices=['cifar10', 'cifar100', 'imag
 parser.add_argument('--data-root', type=str, default='./data')
 parser.add_argument('--model', '-m', type=str, default='wrn',
                     choices=['wrn', 'rn34', 'rn50'], help='Choose architecture.')
+parser.add_argument('--ood-method', choices=['vos', 'dream-ood'], default='vos', help='Choose OOD method.')
 # Loading details
 # WRN Architecture
 parser.add_argument('--wrn-layers', default=40, type=int, help='total number of layers')
@@ -65,17 +68,24 @@ test_loader = torch.utils.data.DataLoader(test_data, batch_size=args.test_bs, sh
                                           num_workers=args.prefetch, pin_memory=True)
 
 # Create model
-if args.model == 'rn50':
-    net = VirtualResNet50(num_classes, null_space_red_dim=args.null_space_red_dim)
-elif args.model == 'rn34':
-    net = VirtualResNet34(num_classes, null_space_red_dim=args.null_space_red_dim)
+if args.ood_method == 'vos':
+    if args.model == 'rn50':
+        net = VirtualResNet50(num_classes, null_space_red_dim=args.null_space_red_dim)
+    elif args.model == 'rn34':
+        net = VirtualResNet34(num_classes, null_space_red_dim=args.null_space_red_dim)
+    else:
+        net = WideResNet(args.wrn_layers, num_classes, args.wrn_widen_factor, drop_rate=args.wrn_droprate,
+                         null_space_red_dim=args.null_space_red_dim)
 else:
-    net = WideResNet(args.wrn_layers, num_classes, args.wrn_widen_factor, drop_rate=args.wrn_droprate,
-                     null_space_red_dim=args.null_space_red_dim)
+    if args.model == 'rn34':
+        net = ResNetModel(name='resnet34', num_classes=num_classes, null_space_red_dim=args.null_space_red_dim)
+    else:
+        raise ValueError(f'Unknown model {args.model}')
 
 # Restore model
 if os.path.isfile(args.checkpoint):
     net.load_state_dict(torch.load(str(args.checkpoint)))
+    print('Model restored!')
 else:
     raise ValueError(f'No checkpoint found at {args.checkpoint}')
 
@@ -99,7 +109,8 @@ results_kwargs = {'model': net,
                   'score': args.score,
                   'temp': args.T,
                   'use_xent': args.use_xent,
-                  'out_as_pos': args.out_as_pos}
+                  'out_as_pos': args.out_as_pos,
+                  'method_name': args.ood_method}
 if args.score == 'Odin':
     # separated because no grad is not applied
     in_score, right_score, wrong_score = lib.get_ood_scores_odin(test_loader, net, args.test_bs, ood_num_examples,
@@ -153,7 +164,7 @@ print('Error Rate {:.2f}'.format(100 * num_wrong / (num_wrong + num_right)))
 # /////////////// End Detection Prelims ///////////////
 
 print('\n\nError Detection')
-show_performance(wrong_score, right_score, method_name='vos/ffs')
+show_performance(wrong_score, right_score, method_name=args.ood_method)
 
 # /////////////// OOD Detection ///////////////
 results_kwargs['in_score'] = in_score
