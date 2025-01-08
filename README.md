@@ -1,13 +1,29 @@
 # FEVER-OOD: Free Energy Vulnerability Elimination for Robust Out-of-Distribution Detection
-Implementation of [FEVER-OOD](https://arxiv.org/abs/2412.01596), a novel method for out-of-distribution detection 
-that leverages free energy-based OOD methods, such as [VOS](https://github.com/deeplearning-wisc/vos) or [Dream-OOD](https://github.com/deeplearning-wisc/dream-ood), to eliminate the vulnerability of these methods 
+Implementation of [**FEVER-OOD**: **F**ree **E**nergy **V**ulnerability **E**limination for **R**obust **O**ut-**o**f-**D**istribution Detection](https://arxiv.org/abs/2412.01596) 
+by [Brian Isaac-Medina](https://kostadinovshalon.github.io/), [Mauricio Che](https://sites.google.com/view/mauriciochemoguel/home), [Yona F.A. Gaus](https://yonafalinie.github.io/), [Samet Akcay](https://github.com/samet-akcay) and [Toby Breckon](https://breckon.org/breckon).
+FEVER-OOD is a novel method for out-of-distribution detection 
+that leverages free energy-based OOD detection methods, such as [VOS](https://github.com/deeplearning-wisc/vos) or [Dream-OOD](https://github.com/deeplearning-wisc/dream-ood), to eliminate the vulnerability of these methods 
 to regions in the feature space that, while abnormal, are still labelled as in-distribution. The reduction of these regions
 improve such free energy-based methods. We achieve state-of-the-art results when applying FEVER-OOD to Dream-OOD using the Imagenet-100 dataset as in-distribution.
 
 ![energy_in_feature_space.png](imgs/energy_in_feature_space.jpg)
 
 This repository is based in the [VOS](https://github.com/deeplearning-wisc/vos) and [Dream-OOD](https://github.com/deeplearning-wisc/dream-ood) repositories, 
-with some changes for compatibility between VOS and Dream-OOD, and the addition of the FEVER-OOD method.
+with some changes for compatibility between VOS and Dream-OOD, and the addition of the FEVER-OOD method. We keep the changelog in the [CHANGELOG.md](CHANGELOG.md) file.
+
+## Contents
+1. [Requirements](#requirements)
+2. [FEVER-OOD - Classification](#fever-ood---classification)
+    1. [In-Distribution Datasets](#in-distribution-datasets)
+    2. [OOD Datasets](#ood-datasets)
+    3. [Training](#training)
+        1. [VOS/FFS](#vos/ffs)
+        2. [Dream-OOD](#dream-ood)
+    4. [Testing](#testing)
+5. [FEVER-OOD - Object Detection](#fever-ood---object-detection)
+    1. [Datasets](#datasets)
+    2. [Training](#training-1)
+    3. [Testing](#testing-1)
 
 ## Requirements 
 
@@ -15,11 +31,12 @@ The classification and object detection models are implemented in PyTorch. To us
 
 1. Install PyTorch and torchvision following the directions on the [official website](https://pytorch.org/).
 2. Install the requirements using `pip install -r requirements.txt`.
-3. _Object Deteciton Only_: Install Detectron2 using the official instructions [here](https://detectron2.readthedocs.io/en/latest/tutorials/install.html).
+3. Install [FrEIA](https://github.com/vislearn/FrEIA).
+4_Object Deteciton Only_: Install Detectron2 using the official instructions [here](https://detectron2.readthedocs.io/en/latest/tutorials/install.html).
 
 ## FEVER-OOD - Classification
 
-We train and evaluate VOS, FFS and Dream-OOD in the CIFAR10, CIFAR100 and Imagenet-100 datasets. The training and testing procedures are described below. All the code regarding classification is its corresponding directory.
+We train and evaluate VOS, FFS and Dream-OOD in the CIFAR10, CIFAR100 and Imagenet-100 datasets. The training and testing procedures are described below. All the code regarding classification is its corresponding directory. Enter the classification directory to run the classification code.
 ### In-Distribution Datasets
 All the datasets are considered to be in a directory `<DATA-DIR>`.
 
@@ -110,6 +127,7 @@ For the Imagenet-100 experiments, we use the same OOD datasets as in [here](http
 For Dream-OOD experiments, we use the generated CIFAR-100 and Imagenet-100 synthetic outliers from the [Dream-OOD](https://github.com/deeplearning-wisc/dream-ood).
 
 ### Training
+
 #### VOS/FFS
 Training involves the use of in-distribution data only. To train a VOS/FFS model, use the `classification/train-vos.py` script, with the following options:
 
@@ -186,15 +204,160 @@ python train-dream-ood.py --dataset imagenet-100 --model r34 --energy_weight 2.5
 ```
 ### Testing
 
+Evaluating classification models is homogeneized for all datasets and methods. To test a model, use the `classification/test.py` script, with the following options:
+
+```
+test.py [--test_bs TEST_BS] [--num_to_avg NUM_TO_AVG] [--validate] [--use_xent] [--checkpoint CHECKPOINT] [--dataset {cifar10,cifar100,imagenet-1k,imagenet-100}] [--data-root DATA_ROOT] [--model {wrn,rn34,rn50}] [--ood-method {vos,dream-ood}] [--wrn-layers WRN_LAYERS]
+               [--wrn-widen-factor WRN_WIDEN_FACTOR] [--wrn-droprate WRN_DROPRATE] [--ngpu NGPU] [--prefetch PREFETCH] [--out_as_pos] [--score SCORE] [--T T] [--noise NOISE] [--null-space-red-dim NULL_SPACE_RED_DIM]
+
+Evaluates a CIFAR OOD Detector
+
+optional arguments:
+  --test_bs TEST_BS     Test Batch Size (default: 200)
+  --num_to_avg NUM_TO_AVG
+                        Average measures across num_to_avg runs. (default: 1)
+  --validate, -v        Evaluate performance on validation distributions. (default: False)
+  --use_xent, -x        Use cross entropy scoring instead of the MSP. (default: False)
+  --checkpoint CHECKPOINT, -c CHECKPOINT
+                        Checkpoint path to test. (default: None)
+  --dataset {cifar10,cifar100,imagenet-1k,imagenet-100}
+                        Choose between CIFAR-10, CIFAR-100, Imagenet-100, Imagenet-1k. (default: None)
+  --data-root DATA_ROOT Data root directory (default: ./data)
+  --model {wrn,rn34,rn50}, -m {wrn,rn34,rn50}
+                        Choose architecture. (default: wrn)
+  --ood-method {vos,dream-ood}
+                        Choose OOD method. (default: vos)
+  --wrn-layers WRN_LAYERS
+                        total number of layers (default: 40)
+  --wrn-widen-factor WRN_WIDEN_FACTOR
+                        widen factor (default: 2)
+  --wrn-droprate WRN_DROPRATE
+                        dropout probability (default: 0.3)
+  --ngpu NGPU           0 = CPU. (default: 1)
+  --prefetch PREFETCH   Pre-fetching threads. (default: 2)
+  --out_as_pos          OE define OOD data as positive. (default: False)
+  --score SCORE {energy,Odin,M}         
+                        score method. (default: energy)
+  --T T                 temperature: energy|Odin (default: 1.0)
+  --noise NOISE         noise for Odin (default: 0)
+  --null-space-red-dim NULL_SPACE_RED_DIM 
+                        Dimensionality reduction for null space. (default: -1)
+```
+
+For instance, to run the test script for a CIFAR-10 WideResNet model trained with VOS, use the following command:
+
+```
+python test.py --dataset cifar10 --model wrn --checkpoint <CHECKPOINT-PATH> --ood-method vos
+```
+
+To evaluate a Dream-OOD ResNet34 model with null space reduction of 114 in the Imagenet-100 dataset, use the following command:
+
+```
+python test.py --dataset imagenet-100 --model r34 --checkpoint <CHECKPOINT-PATH> --ood-method dream-ood --null-space-red-dim 114
+```
+
 ## FEVER-OOD - Object Detection
+Object detection-related models are trained and evaluated with Detectron2, following [VOS](https://github.com/deeplearning-wisc/vos) and [FFS](https://github.com/nish03/FFS). Additionally, this
+repository combines both techniques into the same codebase, allowing to choose between both techniques. The main modifications are in [roihead_gmm.py](detection/modeling/roihead_gmm.py). Enter the detection directory to run the detection code.
 
 ### Datasets
+We use the VOC dataset as in-distribution and test on the COCO and OpenImages datasets as OOD, with images containing overlapping VOC objects removed. Follow the [VOS](https://github.com/deeplearning-wisc/vos?tab=readme-ov-file#dataset-preparation) dataset instructions for detection.
 
 ### Training
+We use the same training procedure as in VOS and FFS, with a few extra options regarding to FEVER-OOD. To train a VOC model, use the `detection/train.py` script, with the following options:
+
+```
+python train_net_gmm.py 
+--dataset-dir path/to/dataset/dir
+--num-gpus 1 
+--config-file VOC-Detection/faster-rcnn/<MODEL>.yaml 
+--random-seed 0 
+--resume
+```
+
+Several example config files for VOS and FFS with FEVER-OOD are available in [detection/configs/VOC-Detection/faster-rcnn](detection/configs/VOC-Detection/faster-rcnn). The related VOS and FEVER-OOD options are given by the following options:
+
+```
+VOS:
+  STARTING_ITER: 12000      # Iteration to start VOS
+  SAMPLE_NUMBER: 75         # Number of samples to keep per class
+  USE_FFS: True             # Use FFS instead of VOS 
+  SAMPLE_FROM: 200          # Number of samplings to construct OOD samples
+NULL_SPACE:
+  RED_DIM: 768              # Dimensionality reduction for null space
+  SMIN_LOSS_WEIGHT: 0.001   # Weight for least singular value/conditioning number loss
+  USE_CONDITIONING: True    # Use conditioning number instead of least singular value
+```
 
 ### Testing
+Testing is carried out similar to VOS. First run the model through the in-distribution dataset:
+```
+python apply_net.py 
+--dataset-dir path/to/dataset/dir
+--test-dataset voc_custom_val 
+--config-file VOC-Detection/faster-rcnn/<MODEL>.yaml 
+--inference-config Inference/standard_nms.yaml 
+--random-seed 0 
+--image-corruption-level 0 
+--visualize 0
+```
+From here you will obtain an object detection threshold that maximizes the F1-score, which will be used for obtaining the OOD metrics. 
 
-## Null Space Projection
+Then run the model through the OOD dataset:
+```
+python apply_net.py
+--dataset-dir path/to/dataset/dir
+--test-dataset coco_ood_val 
+--config-file VOC-Detection/faster-rcnn/<MODEL>..yaml 
+--inference-config Inference/standard_nms.yaml 
+--random-seed 0 
+--image-corruption-level 0 
+--visualize 0
+```
+
+And finally obtain the metrics using:
+```
+python voc_coco_plot.py 
+--name vos 
+--thres <DETECION-THR> 
+--energy 1 
+--seed 0
+```
+
+Where `<DETECTION-THR>` is the threshold obtained from the in-distribution dataset.
+
+## Null Space Visualisation
+We provide a script to create the visualisation of the feature space for a classification model trained in the CIFAR dataset. The script is located in the `classification/null_space_visualisation.py` directory. 
+The script creates the figures 5 to 8 in the paper. The script uses the following options:
+
+```
+null_space_visualisation.py [--test_bs TEST_BS] [--dataset {cifar10,cifar100}] [--layers LAYERS] [--widen-factor WIDEN_FACTOR] [--drop_rate DROP_RATE] [--checkpoint CHECKPOINT] [--ngpu NGPU] [--prefetch PREFETCH] [--T T] [--noise NOISE] [--model_name MODEL_NAME] [--root ROOT]
+                                   [--proj_method {tsne,umap}] [--null_space_red_dim NULL_SPACE_RED_DIM]
+
+Visualize the features of a CIFAR OOD Detector
+
+optional arguments:
+  --test_bs TEST_BS     Test Batch Size (default: 200)
+  --dataset {cifar10,cifar100}, -d {cifar10,cifar100}
+  --layers LAYERS       total number of layers for the WideResNet architecture (default: 40)
+  --widen-factor WIDEN_FACTOR
+                        widen factor for the WideResNet architecture  (default: 2)
+  --drop_rate DROP_RATE
+                        dropout probability for the WideResNet architecture  (default: 0.3)
+  --checkpoint CHECKPOINT
+                        Checkpoint path to resume / test. (default: None)
+  --ngpu NGPU           0 = CPU. (default: 1)
+  --prefetch PREFETCH   Pre-fetching threads. (default: 2)
+  --T T                 temperature: energy|Odin (default: 1.0)
+  --noise NOISE         noise for Odin (default: 0)
+  --model_name MODEL_NAME
+                        Name of the model. Only the WideResNet architecture is available at the moment(default: wrn)
+  --root ROOT           Data root directory (default: ./data)
+  --proj_method {tsne,umap}
+                        Projection method for the feature space. (default: tsne)
+  --null_space_red_dim NULL_SPACE_RED_DIM
+                        Dimensionality reduction for null space. (default: -1)
+```
 
 ## Citation
 You can cite this work as follows:

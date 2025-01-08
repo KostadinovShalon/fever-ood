@@ -17,14 +17,14 @@ from models.resnet import ResNetModel
 parser = argparse.ArgumentParser(description='Evaluates a CIFAR OOD Detector',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 # Setup
-parser.add_argument('--test_bs', type=int, default=200)
+parser.add_argument('--test_bs', type=int, default=200, help='Test Batch Size')
 parser.add_argument('--num_to_avg', type=int, default=1, help='Average measures across num_to_avg runs.')
 parser.add_argument('--validate', '-v', action='store_true', help='Evaluate performance on validation distributions.')
 parser.add_argument('--use_xent', '-x', action='store_true', help='Use cross entropy scoring instead of the MSP.')
 parser.add_argument('--checkpoint', '-c', type=str, help='Checkpoint path to test.')
 parser.add_argument('--dataset', type=str, choices=['cifar10', 'cifar100', 'imagenet-1k', 'imagenet-100'],
                     help='Choose between CIFAR-10, CIFAR-100, Imagenet-100, Imagenet-1k.')
-parser.add_argument('--data-root', type=str, default='./data')
+parser.add_argument('--data-root', type=str, default='./data', help='Data root directory.')
 parser.add_argument('--model', '-m', type=str, default='wrn',
                     choices=['wrn', 'rn34', 'rn50'], help='Choose architecture.')
 parser.add_argument('--ood-method', choices=['vos', 'dream-ood'], default='vos', help='Choose OOD method.')
@@ -38,10 +38,10 @@ parser.add_argument('--ngpu', type=int, default=1, help='0 = CPU.')
 parser.add_argument('--prefetch', type=int, default=2, help='Pre-fetching threads.')
 # EG and benchmark details
 parser.add_argument('--out_as_pos', action='store_true', help='OE define OOD data as positive.')
-parser.add_argument('--score', default='MSP', type=str, help='score options: MSP|energy')
+parser.add_argument('--score', default='energy', type=str, help='Score method', choices=['energy', 'M', 'Odin'])
 parser.add_argument('--T', default=1., type=float, help='temperature: energy|Odin')
 parser.add_argument('--noise', type=float, default=0, help='noise for Odin')
-parser.add_argument('--null-space-red-dim', type=int, default=-1)
+parser.add_argument('--null-space-red-dim', type=int, default=-1, help='Dimensionality reduction for null space.')
 
 args = parser.parse_args()
 print(args)

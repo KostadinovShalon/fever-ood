@@ -32,7 +32,7 @@ parser.add_argument('--noise', type=float, default=0, help='noise for Odin')
 parser.add_argument('--model_name', default='wrn', type=str)
 parser.add_argument('--root', type=str, default='./data')
 parser.add_argument('--proj_method', type=str, default='umap', choices=['tsne', 'umap'])
-parser.add_argument('--null_space_red_dim', type=int, default=-1)
+parser.add_argument('--null_space_red_dim', type=int, default=-1, help='Dimensionality reduction for null space.')
 args = parser.parse_args()
 print(args)
 
