@@ -17,7 +17,7 @@ with some changes for compatibility between VOS and Dream-OOD, and the addition 
     1. [In-Distribution Datasets](#in-distribution-datasets)
     2. [OOD Datasets](#ood-datasets)
     3. [Training](#training)
-        1. [VOS/FFS](#vos/ffs)
+        1. [VOS/FFS](#vosffs)
         2. [Dream-OOD](#dream-ood)
     4. [Testing](#testing)
 5. [FEVER-OOD - Object Detection](#fever-ood---object-detection)
@@ -169,7 +169,7 @@ Other options are also available (please check the script for more information).
 python train-vos.py --dataset cifar10 --model wrn --vos-loss-weight 0.1 --use_ffs --smin_loss_weight 0.1 --null-space-red-dim 64
 ```
 
-#### Dream-0OD
+#### Dream-OOD
 Training Dream-OOD models involves using synthetic outliers generated from the in-distribution data. To train a Dream-OOD model, use the `classification/train-dream-ood.py` script, with the following options:
 
 ```
