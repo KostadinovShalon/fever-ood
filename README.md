@@ -24,6 +24,8 @@ with some changes for compatibility between VOS and Dream-OOD, and the addition 
     1. [Datasets](#datasets)
     2. [Training](#training-1)
     3. [Testing](#testing-1)
+6. [Null Space Visualisation](#null-space-visualisation)
+7. [Citation](#citation)
 
 ## Requirements 
 
