@@ -1,7 +1,7 @@
 ---
 layout: default
 ---
-<a href="images/energy_in_feature_space.png" target="_blank"><img src="images/energy_in_feature_space.png"/></a>
+<a href="images/feverood_poster.png.png" target="_blank"><img src="images/feverood_poster.png.png"/></a>
 
 ## Abstract
 
