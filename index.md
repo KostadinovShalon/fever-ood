@@ -1,7 +1,7 @@
 ---
 layout: default
 ---
-<a href="images/feverood_poster.png.png" target="_blank"><img src="images/feverood_poster.png.png"/></a>
+<a href="images/feverood_poster.jpg" target="_blank"><img src="images/feverood_poster.jpg"/></a>
 
 ## Abstract
 
